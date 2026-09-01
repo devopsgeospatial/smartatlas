@@ -144,7 +144,10 @@ export async function loadDataset(): Promise<Dataset> {
     ringStart,
     dx,
     dy,
-    upis: upiText ? upiText.split('\n') : [],
+    /* Split on either ending: a Windows generator, or git normalising the file
+     * to LF on the way into the repo, must both yield a bare UPI. A stray \r
+     * here is invisible on screen but makes every findByUpi lookup miss. */
+    upis: upiText ? upiText.split(/\r?\n/) : [],
     stats,
     sectorNames: stats.buildings.sectorNames || [],
     zoneNames: stats.buildings.zoneNames || [],

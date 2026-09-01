@@ -1,0 +1,5 @@
+# The prepared dataset is written byte-for-byte by tools/prepare_data.py.
+# Git must not rewrite any of it: the .bin files are packed typed arrays, and
+# upis.txt is index-aligned with them and read by an exact string match.
+public/data/*.bin  binary
+public/data/upis.txt  -text

@@ -261,7 +261,10 @@ def build_buildings():
         f.write(gx.tobytes())
         f.write(gy.tobytes())
 
-    with io.open(os.path.join(OUT, "upis.txt"), "w", encoding="utf-8") as f:
+    # newline="" so Windows does not rewrite these \n as \r\n. The browser splits
+    # on either, but keeping the file LF means the bytes are the same on every
+    # platform and git has nothing to normalise.
+    with io.open(os.path.join(OUT, "upis.txt"), "w", encoding="utf-8", newline="") as f:
         f.write("\n".join(upis))
 
     print(f"  buildings.bin: {n:,} structures, "
