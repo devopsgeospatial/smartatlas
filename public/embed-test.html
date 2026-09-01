@@ -1,9 +1,16 @@
 <!doctype html><meta charset="utf-8"><title>embed harness</title>
+<!--
+  Reproduces the ArcGIS Experience Builder Embed widget's sandbox so embedded
+  behaviour can be checked without deploying to EB first. EB grants only
+  allow-scripts and allow-same-origin: no allow-downloads, no allow-popups.
+
+  ?item=CSV | GeoJSON | Report   which export to open (default CSV)
+-->
 <style>html,body{margin:0;height:100%;background:#111}iframe{width:100%;height:100%;border:0}</style>
-<!-- Same sandbox Experience Builder applies: scripts + same-origin, no downloads, no popups. -->
 <iframe id="f" sandbox="allow-scripts allow-same-origin"
         src="./#at=-1.95400,30.09300,16.5"></iframe>
 <script>
+const item = new URLSearchParams(location.search).get('item') || 'CSV';
 const f = document.getElementById('f');
 const find = (d, sel, text) =>
   [...d.querySelectorAll(sel)].find(e => e.textContent.trim().startsWith(text));
@@ -12,10 +19,9 @@ const tick = () => {
   tries++;
   const d = f.contentDocument;
   if (d) {
-    const openBtn = find(d, 'button', 'Export');
-    const csv = find(d, '.exportdrop button', 'CSV');
-    if (csv && !csv.disabled) { csv.click(); return; }
-    if (openBtn && !d.querySelector('.exportdrop')) openBtn.click();
+    const target = find(d, '.exportdrop button', item);
+    if (target && !target.disabled) { target.click(); return; }
+    if (!d.querySelector('.exportdrop')) find(d, 'button', 'Export')?.click();
   }
   if (tries < 120) setTimeout(tick, 400);
 };

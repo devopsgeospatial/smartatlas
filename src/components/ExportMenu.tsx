@@ -98,7 +98,14 @@ export default function ExportMenu({ lens, filters, stats, selection, features, 
               if (embedded) {
                 setFallback({
                   kind: 'report',
-                  payload: buildReport({ lens, filters, stats, selection, features }),
+                  payload: buildReport({
+                    lens,
+                    filters,
+                    stats,
+                    selection,
+                    features,
+                    noPrint: true,
+                  }),
                 });
                 return;
               }

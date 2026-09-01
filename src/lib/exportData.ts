@@ -106,6 +106,12 @@ export interface ReportInput {
   stats: RawStats | null;
   selection: Selection | null;
   features: BFeature[];
+  /**
+   * Drop the Print button. Set when the report is shown inside the embedded
+   * fallback, where the host sandbox blocks printing too — a button that cannot
+   * work is worse than no button.
+   */
+  noPrint?: boolean;
 }
 
 const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString());
@@ -181,10 +187,14 @@ export function buildReport(input: ReportInput): string {
   @media print { .noprint { display: none; } body { padding: 0; } }
 </style></head><body>
 
-<p class="noprint" style="text-align:right;margin:0 0 10px">
+${
+  input.noPrint
+    ? ''
+    : `<p class="noprint" style="text-align:right;margin:0 0 10px">
   <button onclick="window.print()" style="font:600 10pt 'IBM Plex Sans',Arial;padding:7px 14px;
     border:1px solid #0a7c7a;background:#0a7c7a;color:#fff;border-radius:3px;cursor:pointer">
-    Print or save as PDF</button></p>
+    Print or save as PDF</button></p>`
+}
 
 <h1>SPARC Kigali</h1>
 <p class="sub">${lens.charAt(0).toUpperCase() + lens.slice(1)} report · ${generated}</p>

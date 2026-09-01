@@ -33,7 +33,11 @@ const PREVIEW_LIMIT = 20000;
 
 export default function ExportFallback({ kind, payload, rows, onClose }: Props) {
   const [copied, setCopied] = useState<'idle' | 'ok' | 'fail'>('idle');
+  const [linkCopied, setLinkCopied] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  /* The current view, hash and all, so pasting it opens on this exact screen. */
+  const appUrl = window.location.href;
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -48,6 +52,12 @@ export default function ExportFallback({ kind, payload, rows, onClose }: Props) 
     const ok = await copyText(payload);
     setCopied(ok ? 'ok' : 'fail');
     window.setTimeout(() => setCopied('idle'), 2600);
+  };
+
+  const copyLink = async () => {
+    const ok = await copyText(appUrl);
+    setLinkCopied(ok);
+    window.setTimeout(() => setLinkCopied(false), 2600);
   };
 
   const truncated = payload.length > PREVIEW_LIMIT;
@@ -71,9 +81,9 @@ export default function ExportFallback({ kind, payload, rows, onClose }: Props) 
         </header>
 
         <p className="fallback-why">
-          This app is embedded, and the host page does not allow it to save files. The
-          {kind === 'report' ? ' report' : ' data'} is below — copy it, or open the app in its own
-          tab where Export downloads normally.
+          {kind === 'report'
+            ? 'Saving and printing are blocked inside this embed. The report is shown below. To print or keep it, copy the link and open the app in a new tab.'
+            : 'File downloads are blocked inside this embed. Copy the rows below and paste them into a spreadsheet — or copy the link, open the app in a new tab, and Export saves a file as normal.'}
         </p>
 
         {kind === 'report' ? (
@@ -94,8 +104,17 @@ export default function ExportFallback({ kind, payload, rows, onClose }: Props) 
               Showing the first {PREVIEW_LIMIT.toLocaleString()} characters. Copy takes all of it.
             </span>
           )}
+          <button className="linkbtn" onClick={copyLink} title={appUrl}>
+            {linkCopied ? 'Link copied' : 'Copy link'}
+          </button>
           <button className="themebtn" onClick={copy}>
-            {copied === 'ok' ? 'Copied' : copied === 'fail' ? 'Copy failed' : 'Copy all'}
+            {copied === 'ok'
+              ? 'Copied'
+              : copied === 'fail'
+                ? 'Copy failed'
+                : kind === 'report'
+                  ? 'Copy HTML'
+                  : 'Copy all'}
           </button>
         </footer>
       </div>
