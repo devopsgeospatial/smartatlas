@@ -69,7 +69,6 @@ export default function MapView(props: Props) {
     const map = mapRef.current;
     if (!map || !map.getLayer('structures')) return;
     map.setPaintProperty('structures', 'fill-color', colorExpr());
-    map.setPaintProperty('structures-dot', 'circle-color', colorExpr());
     const sel = propsRef.current.selectedId;
     const f = ['==', ['get', 'OBJECTID'], sel ?? -1] as any;
     map.setFilter('selection', f);
@@ -198,27 +197,18 @@ export default function MapView(props: Props) {
 
       map.addSource('structures', { type: 'geojson', data: EMPTY as any });
 
-      // Below z16 a footprint is smaller than a pixel, so a dot is the honest
-      // mark; above it, the real outline is.
-      map.addLayer({
-        id: 'structures-dot',
-        type: 'circle',
-        source: 'structures',
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2, 15, 3.4, 16.5, 5],
-          'circle-color': colorExpr(),
-          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0.9, 16.5, 0],
-          'circle-stroke-width': 0.5,
-          'circle-stroke-color': 'rgba(6,14,13,.7)',
-        },
-      });
+      // The footprint is the mark at every zoom. A proxy dot layer used to stand
+      // in below z16, but it overlapped the polygons through the cross-fade and
+      // read as clutter over imagery.
       map.addLayer({
         id: 'structures',
         type: 'fill',
         source: 'structures',
         paint: {
           'fill-color': colorExpr(),
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 0.85],
+          // Slightly softer where footprints are only a few pixels across, so a
+          // dense sector reads as texture rather than noise.
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0.7, 16.5, 0.85],
         },
       });
       map.addLayer({
@@ -278,7 +268,7 @@ export default function MapView(props: Props) {
         },
       });
 
-      for (const layer of ['structures', 'structures-dot']) {
+      for (const layer of ['structures']) {
         map.on('click', layer, (e) => {
           const f = e.features && (e.features[0] as unknown as BFeature);
           if (f) propsRef.current.onSelect(f);
@@ -295,9 +285,7 @@ export default function MapView(props: Props) {
         });
       }
       map.on('click', (e) => {
-        const hits = map.queryRenderedFeatures(e.point, {
-          layers: ['structures', 'structures-dot'],
-        });
+        const hits = map.queryRenderedFeatures(e.point, { layers: ['structures'] });
         if (!hits.length) propsRef.current.onSelect(null);
       });
 
