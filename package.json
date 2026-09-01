@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Smart Parcel Atlas — one building record, read by each institution through its own lens. Built on the SPARC enriched building layer.",
+  "description": "SPARC Kigali — one building record, read by each institution through its own lens. Built on the SPARC enriched building layer.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

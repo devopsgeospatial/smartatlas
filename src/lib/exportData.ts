@@ -157,7 +157,7 @@ export function buildReport(input: ReportInput): string {
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Smart Parcel Atlas — ${lens} report</title>
+<title>SPARC Kigali — ${lens} report</title>
 <style>
   @page { margin: 18mm; }
   * { box-sizing: border-box; }
@@ -186,7 +186,7 @@ export function buildReport(input: ReportInput): string {
     border:1px solid #0a7c7a;background:#0a7c7a;color:#fff;border-radius:3px;cursor:pointer">
     Print or save as PDF</button></p>
 
-<h1>Smart Parcel Atlas</h1>
+<h1>SPARC Kigali</h1>
 <p class="sub">${lens.charAt(0).toUpperCase() + lens.slice(1)} report · ${generated}</p>
 <p class="sub">Scope: ${scope(filters)}</p>
 

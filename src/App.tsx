@@ -128,8 +128,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="dot" aria-hidden="true" />
-          <b>Smart Parcel Atlas</b>
+          <b>SPARC Kigali</b>
         </div>
 
         <SearchBox onCoords={goToCoords} onUpi={goToUpi} onSector={goToSector} />

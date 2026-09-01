@@ -1,4 +1,4 @@
-# Smart Parcel Atlas
+# SPARC Kigali
 
 One building record — footprint, predicted use, height, floor count, parcel UPI,
 master-plan zone — read by each institution through its own lens: **Atlas**,

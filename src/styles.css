@@ -1,7 +1,7 @@
 @import './design/tokens.css';
 
 /* ============================================================================
- * Smart Parcel Atlas — application styles.
+ * SPARC Kigali — application styles.
  * Every colour here is a token. A literal hex in this file is a bug.
  * ========================================================================== */
 
@@ -94,13 +94,6 @@ button {
   align-items: center;
   gap: var(--sp-4);
   flex: none;
-}
-.brand .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 .brand b {
   font-size: 13px;
