@@ -1,0 +1,12 @@
+node_modules
+dist
+
+# Source exports — hundreds of MB, kept out of the repo.
+# Regenerate public/data with: npm run data
+Kigali_Buildings.geojson
+tax.dbf
+tax.dbf.xml
+tax.cpg
+tax.prj
+tax.shp
+tax.shx

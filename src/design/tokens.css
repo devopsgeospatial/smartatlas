@@ -1,0 +1,185 @@
+/* ============================================================================
+ * UBUTAKA — design tokens for Smart Parcel Atlas
+ *
+ * Three tiers, following the Calcite convention: core values, semantic names,
+ * component overrides. Nothing outside this file may hardcode a colour.
+ *
+ * Dark is the shipping default: the product's ground is satellite imagery, and
+ * chrome lighter than the imagery destroys figure-ground. The light theme is
+ * for case packs, PDF export and bright field conditions.
+ * ========================================================================== */
+
+:root {
+  /* ---- core: neutrals (cyan-green bias, never pure grey) ---------------- */
+  --core-ink-950: #070c0d;
+  --core-ink-900: #0d1517;
+  --core-ink-850: #121d1f;
+  --core-ink-800: #18262a;
+  --core-ink-700: #1e2e31;
+  --core-ink-600: #2a3d41;
+  --core-ink-500: #3c5458;
+  --core-ink-300: #7e918f;
+  --core-ink-200: #a5b6b4;
+  --core-ink-050: #e9f0ef;
+
+  --core-paper-000: #ffffff;
+  --core-paper-050: #f5f8f7;
+  --core-paper-100: #e7ecea;
+  --core-paper-150: #e1e8e6;
+  --core-paper-300: #cbd6d3;
+  --core-paper-400: #a9bab6;
+  --core-paper-600: #667a78;
+  --core-paper-700: #3d4e4d;
+  --core-paper-900: #0b1516;
+
+  /* ---- core: accent. Cyan, because it is the one hue absent from the
+         land-use palette. Nothing on the map can be mistaken for a control. */
+  --core-cyan-400: #5ee3de;
+  --core-cyan-500: #4adad5;
+  --core-cyan-600: #1fc8c3;
+  --core-cyan-700: #14a6a2;
+  --core-cyan-800: #0a7c7a;
+  --core-cyan-900: #075150;
+  --core-cyan-ink: #04211f;
+
+  /* ---- core: status. Reserved. Never used for a data class. ------------- */
+  --core-ok-d: #4fb56a;
+  --core-ok-l: #237a3b;
+  --core-watch-d: #dca23c;
+  --core-watch-l: #8f6206;
+  --core-serious-d: #e07c43;
+  --core-serious-l: #a64f1c;
+  --core-crit-d: #e2685c;
+  --core-crit-l: #a5342b;
+
+  /* ---- core: land use. Validated for colour-vision deficiency and contrast.
+         Worst adjacent pair: dE 22.2 normal vision, dE 9.8 protanopia. ----- */
+  --core-fam-res-d: #3e9a55;
+  --core-fam-com-d: #f0b454;
+  --core-fam-ins-d: #5d95e0;
+  --core-fam-res-l: #3c9a4e;
+  --core-fam-com-l: #e3a63f;
+  --core-fam-ins-l: #3b6fc9;
+  --core-sub-ri: #8fcb9b;
+  --core-sub-rap-d: #2a7a4c;
+  --core-sub-rap-l: #1d5e39;
+  --core-sub-cmi-d: #d97a47;
+  --core-sub-cmi-l: #c2612e;
+  --core-sub-ind-d: #9c74d0;
+  --core-sub-ind-l: #7a4fb0;
+
+  /* ---- core: structure ------------------------------------------------- */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 20px;
+  --sp-8: 24px;
+  --sp-9: 32px;
+  --sp-10: 40px;
+
+  --r-0: 0;
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-pill: 999px;
+
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --dur-1: 120ms; /* control state */
+  --dur-2: 180ms; /* panel */
+  --dur-3: 320ms; /* map fly-to */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Left rail and right panel are deliberately the same width. */
+  --rail-w: 300px;
+  --dossier-w: 300px;
+  --topbar-h: 48px;
+
+  /* ---- semantic: dark theme (default) ---------------------------------- */
+  --bg-0: var(--core-ink-950);
+  --bg-1: var(--core-ink-900);
+  --bg-2: var(--core-ink-850);
+  --bg-3: var(--core-ink-800);
+  --line-1: var(--core-ink-700);
+  --line-2: var(--core-ink-600);
+  --line-3: var(--core-ink-500);
+  --tx-1: var(--core-ink-050);
+  --tx-2: var(--core-ink-200);
+  --tx-3: var(--core-ink-300);
+
+  --accent: var(--core-cyan-600);
+  --accent-hover: var(--core-cyan-500);
+  --accent-press: var(--core-cyan-700);
+  --accent-ink: var(--core-cyan-ink);
+  --accent-wash: rgba(31, 200, 195, 0.12);
+  --accent-edge: rgba(31, 200, 195, 0.38);
+  --focus: var(--core-cyan-400);
+  --select: #ffffff;
+  /* Magnitude marks. Deliberately not the accent — the accent means
+     'you can act on this', and a bar is not actionable. */
+  --data-1: #5fa8a5;
+
+  --ok: var(--core-ok-d);
+  --watch: var(--core-watch-d);
+  --serious: var(--core-serious-d);
+  --critical: var(--core-crit-d);
+
+  --fam-res: var(--core-fam-res-d);
+  --fam-com: var(--core-fam-com-d);
+  --fam-ins: var(--core-fam-ins-d);
+  --sub-ri: var(--core-sub-ri);
+  --sub-rap: var(--core-sub-rap-d);
+  --sub-cmi: var(--core-sub-cmi-d);
+  --sub-ind: var(--core-sub-ind-d);
+
+  --e-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --e-2: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
+  --e-3: 0 12px 32px -10px rgba(0, 0, 0, 0.75);
+
+  color-scheme: dark;
+}
+
+/* ---- semantic: light theme. Opt-in via data-theme on <html>. ------------ */
+:root[data-theme="light"] {
+  --bg-0: var(--core-paper-100);
+  --bg-1: var(--core-paper-000);
+  --bg-2: var(--core-paper-050);
+  --bg-3: var(--core-paper-150);
+  --line-1: var(--core-paper-150);
+  --line-2: var(--core-paper-300);
+  --line-3: var(--core-paper-400);
+  --tx-1: var(--core-paper-900);
+  --tx-2: var(--core-paper-700);
+  --tx-3: var(--core-paper-600);
+
+  --accent: var(--core-cyan-800);
+  --accent-hover: var(--core-cyan-700);
+  --accent-press: var(--core-cyan-900);
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(10, 124, 122, 0.1);
+  --accent-edge: rgba(10, 124, 122, 0.35);
+  --focus: var(--core-cyan-800);
+  --select: var(--core-paper-900);
+  --data-1: #3e8a87;
+
+  --ok: var(--core-ok-l);
+  --watch: var(--core-watch-l);
+  --serious: var(--core-serious-l);
+  --critical: var(--core-crit-l);
+
+  --fam-res: var(--core-fam-res-l);
+  --fam-com: var(--core-fam-com-l);
+  --fam-ins: var(--core-fam-ins-l);
+  --sub-rap: var(--core-sub-rap-l);
+  --sub-cmi: var(--core-sub-cmi-l);
+  --sub-ind: var(--core-sub-ind-l);
+
+  --e-1: 0 1px 2px rgba(11, 21, 22, 0.08);
+  --e-2: 0 4px 14px -4px rgba(11, 21, 22, 0.16);
+  --e-3: 0 12px 32px -10px rgba(11, 21, 22, 0.22);
+
+  color-scheme: light;
+}
