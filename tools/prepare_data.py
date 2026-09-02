@@ -44,6 +44,21 @@ def zone_code(raw):
     return s.split()[0].upper() if s else ""
 
 
+# The tax table spells some sectors in upper case, and one is misspelled. Left
+# alone they become extra rows that no sector filter can ever select, so every
+# name is folded onto the spelling the buildings layer uses.
+SECTOR_ALIASES = {"mageragere": "mageregere"}
+
+
+def canon_sector(raw, canon):
+    """Fold a tax-table sector name onto the buildings layer's spelling."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    k = SECTOR_ALIASES.get(s.lower(), s.lower())
+    return canon.get(k, s.title())
+
+
 def outer_ring(geom):
     """The outer ring of a Polygon, or of the first part of a MultiPolygon."""
     if not geom:
@@ -289,7 +304,8 @@ def build_buildings():
 
 
 # ---------------------------------------------------------------------- tax
-def build_tax():
+def build_tax(sector_names):
+    canon = {s.lower(): s for s in sector_names if s}
     total = 0
     designated = 0
     vacant = 0
@@ -298,7 +314,9 @@ def build_tax():
     by_zone = Counter()
     vac_by_zone = Counter()
     vac_by_district = Counter()
-    vac_by_sector = defaultdict(lambda: {"district": "", "vacant": 0, "designated": 0, "sqm": 0.0})
+    vac_by_sector = defaultdict(
+        lambda: {"district": "", "vacant": 0, "designated": 0, "sqm": 0.0, "byZone": Counter()}
+    )
     sqm_vacant = 0.0
 
     for row in read_dbf(TAX_DBF):
@@ -307,7 +325,7 @@ def build_tax():
         is_vacant = row.get("IS_VACANT") == "1"
         zone = (row.get("MASTER_ZON") or "").strip().upper()
         district = (row.get("district") or "").strip()
-        sector = (row.get("sector") or "").strip()
+        sector = canon_sector(row.get("sector"), canon)
         status = (row.get("TAX_STATUS") or "").strip()
         try:
             size = float(row.get("size") or 0)
@@ -331,10 +349,15 @@ def build_tax():
             vac_by_district[district] += 1
             vac_by_sector[sector]["vacant"] += 1
             vac_by_sector[sector]["sqm"] += size
+            # Per-sector zone mix, so the Revenue lens can narrow to one sector
+            # instead of only ever showing the city.
+            if zone:
+                vac_by_sector[sector]["byZone"][zone] += 1
 
     sectors = [
         {"sector": s, "district": v["district"], "vacant": v["vacant"],
-         "designated": v["designated"], "sqm": round(v["sqm"])}
+         "designated": v["designated"], "sqm": round(v["sqm"]),
+         "byZone": dict(v["byZone"])}
         for s, v in vac_by_sector.items() if v["vacant"] > 0
     ]
     sectors.sort(key=lambda r: -r["vacant"])
@@ -360,10 +383,12 @@ def main():
     if missing:
         raise SystemExit("missing input(s):\n  " + "\n  ".join(missing))
 
-    print("reading tax.dbf ...")
-    tax = build_tax()
+    # Buildings first: its sector names are the canonical spellings, and the tax
+    # pass folds its own onto them.
     print("reading Kigali_Buildings.geojson ...")
     buildings = build_buildings()
+    print("reading tax.dbf ...")
+    tax = build_tax(buildings["sectorNames"])
 
     stats = {
         "generatedAt": __import__("datetime").datetime.now().isoformat(timespec="seconds"),

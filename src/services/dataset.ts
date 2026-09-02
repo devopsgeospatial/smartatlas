@@ -21,7 +21,62 @@ export interface TaxTable {
   byStatus: Record<string, number>;
   vacantByZone: Record<string, number>;
   vacantByDistrict: Record<string, number>;
-  vacantBySector: { sector: string; district: string; vacant: number; sqm: number }[];
+  vacantBySector: {
+    sector: string;
+    district: string;
+    vacant: number;
+    sqm: number;
+    byZone: Record<string, number>;
+  }[];
+}
+
+/**
+ * The vacant-land figures for whatever area is selected.
+ *
+ * The parcel table is aggregated at build time rather than held row by row, so
+ * a sector is narrowed by picking its precomputed row instead of scanning. The
+ * fields that only mean something city-wide — the district split, the sector
+ * ranking — are null when one sector is in scope, so a caller cannot render a
+ * chart that silently still shows the whole city.
+ */
+export interface TaxView {
+  /** 'ALL', or the sector name. */
+  scope: string;
+  /** The sector's district. Null city-wide. */
+  district: string | null;
+  vacant: number;
+  sqm: number;
+  byZone: Record<string, number>;
+  byDistrict: Record<string, number> | null;
+  bySector: TaxTable['vacantBySector'] | null;
+}
+
+/** Narrow the parcel figures to one sector, or hand back the whole city. */
+export function taxFor(tax: TaxTable, sector: string): TaxView {
+  if (sector === 'ALL') {
+    return {
+      scope: 'ALL',
+      district: null,
+      vacant: tax.vacantDesignated,
+      sqm: tax.vacantSqm,
+      byZone: tax.vacantByZone,
+      byDistrict: tax.vacantByDistrict,
+      bySector: tax.vacantBySector,
+    };
+  }
+  const row = tax.vacantBySector.find((r) => r.sector === sector);
+  /* A sector with no vacant parcels has no row at all. That is a real answer —
+   * zero — not missing data, so it reports zero rather than falling back to the
+   * city total, which would read as if the filter had been ignored. */
+  return {
+    scope: sector,
+    district: row?.district ?? null,
+    vacant: row?.vacant ?? 0,
+    sqm: row?.sqm ?? 0,
+    byZone: row?.byZone ?? {},
+    byDistrict: null,
+    bySector: null,
+  };
 }
 
 export interface RawStats {

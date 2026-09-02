@@ -952,6 +952,27 @@ button {
 }
 .lens-sub { margin: var(--sp-7) 0 var(--sp-4); }
 
+/* Names the area the figures below are for. Without it a narrowed lens and a
+   city-wide one look identical apart from the numbers. */
+.lens-scope {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hover);
+  margin: calc(var(--sp-5) * -1 + 2px) 0 var(--sp-5);
+}
+.lens-scope-d { color: var(--tx-3); }
+
+.lens-note {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--tx-3);
+  border-left: 2px solid var(--line-2);
+  padding-left: var(--sp-4);
+  margin: 0 0 var(--sp-6);
+}
+
 /* ---------- export menu ---------------------------------------------------- */
 .exportmenu { position: relative; flex: none; }
 .exportdrop {

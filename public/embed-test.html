@@ -10,7 +10,12 @@
 <iframe id="f" sandbox="allow-scripts allow-same-origin"
         src="./#at=-1.95400,30.09300,16.5"></iframe>
 <script>
-const item = new URLSearchParams(location.search).get('item') || 'CSV';
+const params = new URLSearchParams(location.search);
+const item = params.get('item') || 'CSV';
+// Optional: drive the app's own URL state, so an export can be checked under a
+// filter rather than only city-wide.
+const state = params.get('state');
+if (state) document.getElementById('f').src = './#' + state;
 const f = document.getElementById('f');
 const find = (d, sel, text) =>
   [...d.querySelectorAll(sel)].find(e => e.textContent.trim().startsWith(text));

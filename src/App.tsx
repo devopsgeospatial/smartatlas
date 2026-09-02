@@ -193,7 +193,12 @@ export default function App() {
               onCopied={onCopied}
             />
           ) : (
-            <LensPanel lens={lens} stats={dataset ? dataset.stats : null} selection={selection} />
+            <LensPanel
+              lens={lens}
+              stats={dataset ? dataset.stats : null}
+              selection={selection}
+              filters={filters}
+            />
           )}
         </aside>
       </div>

@@ -7,7 +7,7 @@
  * -------------------------------------------------------------------------- */
 
 import { LABELS, ORDER, useLabel } from '../constants';
-import type { RawStats, Selection } from '../services/dataset';
+import { taxFor, type RawStats, type Selection } from '../services/dataset';
 import type { BFeature, Filters, LensId } from '../types';
 
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
@@ -148,18 +148,39 @@ export function buildReport(input: ReportInput): string {
     )
     .join('');
 
-  const districtRows = Object.entries(tax.vacantByDistrict)
-    .sort((x, y) => y[1] - x[1])
-    .map(([d, v]) => `<tr><td>${d}</td><td class="n">${n(v)}</td></tr>`)
-    .join('');
+  /* The parcel tables follow the same area as the rest of the report. Narrowed
+   * to one sector, a district split and a sector ranking would both be a single
+   * row, so that section becomes the zone mix inside the sector instead. */
+  const t = taxFor(tax, filters.sector);
 
-  const sectorRows = tax.vacantBySector
-    .slice(0, 15)
-    .map(
-      (r) =>
-        `<tr><td>${r.sector}</td><td>${r.district}</td><td class="n">${n(r.vacant)}</td><td class="n">${ha(r.sqm)}</td></tr>`,
-    )
-    .join('');
+  const vacantSection =
+    t.byDistrict && t.bySector
+      ? `<h2>Vacant taxable parcels by district</h2>
+<table><thead><tr><th>District</th><th class="n">Parcels</th></tr></thead><tbody>${Object.entries(
+          t.byDistrict,
+        )
+          .sort((x, y) => y[1] - x[1])
+          .map(([d, v]) => `<tr><td>${d}</td><td class="n">${n(v)}</td></tr>`)
+          .join('')}</tbody></table>
+
+<h2>Vacant taxable parcels by sector</h2>
+<table><thead><tr><th>Sector</th><th>District</th><th class="n">Parcels</th><th class="n">Hectares</th></tr></thead>
+<tbody>${t.bySector
+          .slice(0, 15)
+          .map(
+            (r) =>
+              `<tr><td>${r.sector}</td><td>${r.district}</td><td class="n">${n(r.vacant)}</td><td class="n">${ha(r.sqm)}</td></tr>`,
+          )
+          .join('')}</tbody></table>`
+      : `<h2>Vacant taxable parcels by zone — ${t.scope}</h2>
+<table><thead><tr><th>Zone</th><th>Description</th><th class="n">Parcels</th></tr></thead>
+<tbody>${Object.entries(t.byZone)
+          .sort((x, y) => y[1] - x[1])
+          .map(
+            ([z, v]) =>
+              `<tr><td>${z}</td><td>${(b.zoneLabels[z] || '').replace(/^[A-Z0-9]+\s*-\s*/, '')}</td><td class="n">${n(v)}</td></tr>`,
+          )
+          .join('')}</tbody></table>`;
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -203,17 +224,14 @@ ${
 <h2>Headline</h2>
 <div class="kpis">
   <div class="kpi"><div class="l">Structures</div><div class="v">${n(selection?.matches ?? b.total)}</div></div>
-  <div class="kpi"><div class="l">New since 2023</div><div class="v">${n(b.byYear['2025'])}</div></div>
-  <div class="kpi"><div class="l">Vacant taxable parcels</div><div class="v">${n(tax.vacantDesignated)}</div></div>
-  <div class="kpi"><div class="l">Vacant land (ha)</div><div class="v">${ha(tax.vacantSqm)}</div></div>
+  <div class="kpi"><div class="l">New since 2023</div><div class="v">${n(
+    selection?.byYear['2025'] ?? b.byYear['2025'],
+  )}</div></div>
+  <div class="kpi"><div class="l">Vacant taxable parcels</div><div class="v">${n(t.vacant)}</div></div>
+  <div class="kpi"><div class="l">Vacant land (ha)</div><div class="v">${ha(t.sqm)}</div></div>
 </div>
 
-<h2>Vacant taxable parcels by district</h2>
-<table><thead><tr><th>District</th><th class="n">Parcels</th></tr></thead><tbody>${districtRows}</tbody></table>
-
-<h2>Vacant taxable parcels by sector</h2>
-<table><thead><tr><th>Sector</th><th>District</th><th class="n">Parcels</th><th class="n">Hectares</th></tr></thead>
-<tbody>${sectorRows}</tbody></table>
+${vacantSection}
 
 <h2>Structures by zone</h2>
 <table><thead><tr><th>Zone</th><th>Description</th><th class="n">Structures</th></tr></thead>
