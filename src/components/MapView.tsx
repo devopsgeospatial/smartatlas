@@ -37,6 +37,8 @@ export interface FlyTarget {
 
 interface Props {
   dataset: Dataset | null;
+  /** The load threw, so "loading" would be a lie. */
+  loadFailed?: boolean;
   filters: Filters;
   selectedId: number | null;
   flyTo: FlyTarget | null;
@@ -81,7 +83,7 @@ export default function MapView(props: Props) {
     const d = propsRef.current.dataset;
     if (!map || !readyRef.current) return;
     if (!d) {
-      setStatus('Loading dataset…');
+      setStatus(propsRef.current.loadFailed ? 'Dataset not loaded' : 'Loading dataset…');
       return;
     }
     if (map.getZoom() < CONFIG.pointZoom) {
@@ -314,6 +316,7 @@ export default function MapView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     props.dataset,
+    props.loadFailed,
     props.filters.uses.join(','),
     props.filters.years.join(','),
     props.filters.sector,

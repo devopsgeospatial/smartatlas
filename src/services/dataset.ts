@@ -121,23 +121,97 @@ export interface Dataset {
 
 let cache: Dataset | null = null;
 
-export async function loadDataset(): Promise<Dataset> {
+/** Bytes received so far, and the total once every response has declared its size. */
+export interface LoadProgress {
+  loaded: number;
+  total: number | null;
+}
+
+/**
+ * Fetch a file as bytes, reporting its declared size as soon as the headers
+ * land and each chunk as it arrives. Returns null for a missing file so the
+ * caller can decide whether that is fatal.
+ */
+async function fetchBytes(
+  url: string,
+  onSize: (bytes: number | null) => void,
+  onChunk: (bytes: number) => void,
+): Promise<ArrayBuffer | null> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    onSize(0);
+    return null;
+  }
+  const declared = Number(res.headers.get('content-length'));
+  onSize(Number.isFinite(declared) && declared > 0 ? declared : null);
+
+  if (!res.body) {
+    const buf = await res.arrayBuffer();
+    onChunk(buf.byteLength);
+    return buf;
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.byteLength;
+    onChunk(value.byteLength);
+  }
+  const out = new Uint8Array(size);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.byteLength;
+  }
+  return out.buffer;
+}
+
+/**
+ * The first load is the only wait in the product — some 35 MB before anything
+ * can be counted — so it reports progress rather than leaving the panels blank.
+ * The three data files are streamed concurrently and their sizes summed as each
+ * response declares one; until all three have, the total is null.
+ */
+export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promise<Dataset> {
   if (cache) return cache;
   const base = import.meta.env.BASE_URL;
 
-  const [statsRes, binRes, geomRes, upiRes] = await Promise.all([
+  const sizes: (number | null | undefined)[] = [undefined, undefined, undefined];
+  let loaded = 0;
+  const report = () => {
+    if (!onProgress) return;
+    const known = sizes.every((s) => s !== undefined);
+    const total = known && sizes.every((s) => s !== null) ? sizes.reduce((a, s) => a + (s || 0), 0) : null;
+    onProgress({ loaded, total });
+  };
+  const get = (i: number, file: string) =>
+    fetchBytes(
+      `${base}data/${file}`,
+      (s) => {
+        sizes[i] = s;
+        report();
+      },
+      (n) => {
+        loaded += n;
+        report();
+      },
+    );
+
+  const [statsRes, buf, geomBuf, upiBuf] = await Promise.all([
     fetch(`${base}data/stats.json`),
-    fetch(`${base}data/buildings.bin`),
-    fetch(`${base}data/geometry.bin`),
-    fetch(`${base}data/upis.txt`),
+    get(0, 'buildings.bin'),
+    get(1, 'geometry.bin'),
+    get(2, 'upis.txt'),
   ]);
-  if (!statsRes.ok || !binRes.ok) {
+  if (!statsRes.ok || !buf) {
     throw new Error('Dataset not found. Run: python tools/prepare_data.py');
   }
 
   const stats: RawStats = await statsRes.json();
-  const buf = await binRes.arrayBuffer();
-  const upiText = upiRes.ok ? await upiRes.text() : '';
+  const upiText = upiBuf ? new TextDecoder().decode(upiBuf) : '';
 
   const magic = new TextDecoder().decode(new Uint8Array(buf, 0, 5));
   if (magic !== 'SPAB1') throw new Error('Unexpected dataset format');
@@ -168,8 +242,8 @@ export async function loadDataset(): Promise<Dataset> {
   let ringStart = new Uint32Array(n + 1);
   let dx = new Int16Array(0);
   let dy = new Int16Array(0);
-  if (geomRes.ok) {
-    const gbuf = await geomRes.arrayBuffer();
+  if (geomBuf) {
+    const gbuf = geomBuf;
     const gmagic = new TextDecoder().decode(new Uint8Array(gbuf, 0, 5));
     if (gmagic === 'SPAG1') {
       const gv = new DataView(gbuf);

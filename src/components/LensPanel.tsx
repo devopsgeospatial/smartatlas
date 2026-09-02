@@ -1,7 +1,7 @@
 import { COLORS, LABELS, ORDER, YEAR_ORDER } from '../constants';
 import Bars, { type BarDatum } from './Bars';
 import { SECTOR_LIST } from '../sectors';
-import { taxFor, type RawStats, type Selection } from '../services/dataset';
+import { taxFor, type LoadProgress, type RawStats, type Selection } from '../services/dataset';
 import type { Filters, LensId } from '../types';
 
 interface Props {
@@ -9,6 +9,8 @@ interface Props {
   stats: RawStats | null;
   selection: Selection | null;
   filters: Filters;
+  /** Download progress while stats is still null. */
+  progress?: LoadProgress | null;
 }
 
 const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString());
@@ -65,12 +67,23 @@ function Scope({ sector }: { sector: string }) {
 /** Strip the leading code from "R1A-Low density residential densification zone". */
 const zoneDesc = (label: string) => (label || '').replace(/^[A-Z0-9]+\s*-\s*/, '');
 
-export default function LensPanel({ lens, stats, selection, filters }: Props) {
+export default function LensPanel({ lens, stats, selection, filters, progress }: Props) {
   if (!stats) {
+    const mb = (bytes: number) => (bytes / 1e6).toFixed(1);
     return (
       <div className="lens">
         <div className="empty">
-          <div className="d">Loading…</div>
+          <div className="t">Loading the city</div>
+          <div className="d num">
+            {progress?.total
+              ? `${mb(progress.loaded)} of ${mb(progress.total)} MB`
+              : progress
+                ? `${mb(progress.loaded)} MB`
+                : 'Connecting…'}
+          </div>
+          <div className="d">
+            Every structure is held in the browser, so the first load is the only wait.
+          </div>
         </div>
       </div>
     );

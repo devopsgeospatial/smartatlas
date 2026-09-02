@@ -11,6 +11,7 @@ import {
   loadDataset,
   summarise,
   type Dataset,
+  type LoadProgress,
   type Selection,
 } from './services/dataset';
 import type { BFeature, CameraState, Filters, LensId, Sector } from './types';
@@ -23,12 +24,34 @@ const LENSES: { id: LensId; label: string }[] = [
 
 const initial = readUrl();
 
+/**
+ * A single line of progress across the seam under the top bar. Determinate once
+ * every data file has declared its size; a slow sweep until then, so the page
+ * never sits still during the one wait it has.
+ */
+function LoadBar({ progress }: { progress: LoadProgress | null }) {
+  const pct = progress?.total ? Math.min(100, (progress.loaded / progress.total) * 100) : null;
+  return (
+    <div
+      className={'loadbar' + (pct === null ? ' indeterminate' : '')}
+      role="progressbar"
+      aria-label="Loading dataset"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct === null ? undefined : Math.round(pct)}
+    >
+      <i style={pct === null ? undefined : { width: `${pct}%` }} />
+    </div>
+  );
+}
+
 export default function App() {
   const [lens, setLens] = useState<LensId>(initial.lens);
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [selected, setSelected] = useState<BFeature | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<LoadProgress | null>(null);
   const [viewFeatures, setViewFeatures] = useState<BFeature[]>([]);
   const [flyTo, setFlyTo] = useState<FlyTarget | null>(
     initial.camera
@@ -47,7 +70,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    loadDataset()
+    loadDataset(setProgress)
       .then(setDataset)
       .catch((e) => setError(e?.message || 'Could not load the dataset.'));
   }, []);
@@ -159,6 +182,8 @@ export default function App() {
         </button>
       </header>
 
+      {!dataset && !error && <LoadBar progress={progress} />}
+
       <div className="workspace">
         <FilterRail
           filters={filters}
@@ -169,6 +194,7 @@ export default function App() {
 
         <MapView
           dataset={dataset}
+          loadFailed={error !== null}
           filters={filters}
           selectedId={selected ? selected.properties.OBJECTID : null}
           flyTo={flyTo}
@@ -198,6 +224,7 @@ export default function App() {
               stats={dataset ? dataset.stats : null}
               selection={selection}
               filters={filters}
+              progress={progress}
             />
           )}
         </aside>

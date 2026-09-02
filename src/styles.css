@@ -79,6 +79,39 @@ button {
   grid-template-columns: var(--rail-w) 1fr;
 }
 
+/* ---------- first-load progress -------------------------------------------- */
+/* Sits on the seam under the top bar. One line, accent-coloured; the panels
+   beneath stay in place so the layout does not jump when it goes. */
+.loadbar {
+  position: absolute;
+  top: var(--topbar-h);
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent-wash);
+  z-index: 5;
+  overflow: hidden;
+}
+.loadbar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width var(--dur-1) linear;
+}
+.loadbar.indeterminate i {
+  width: 30%;
+  animation: loadsweep 1.1s ease-in-out infinite;
+}
+@keyframes loadsweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(333%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loadbar.indeterminate i { animation: none; width: 100%; opacity: 0.5; }
+}
+.app { position: relative; }
+
 /* ---------- top bar -------------------------------------------------------- */
 .topbar {
   display: flex;
@@ -941,6 +974,17 @@ button {
 .chip.serious { color: var(--serious); }
 .chip.critical { color: var(--critical); }
 .chip.neutral { color: var(--tx-3); border-color: var(--line-2); }
+
+/* ---------- empty / loading state ----------------------------------------- */
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-6) 0;
+}
+.empty .t { font-size: 13px; font-weight: 600; color: var(--tx-1); }
+.empty .d { font-size: 11.5px; line-height: 1.5; color: var(--tx-3); }
+.empty .d.num { font-family: var(--font-mono); color: var(--tx-2); }
 
 /* ---------- lens panel ----------------------------------------------------- */
 .lens { padding: var(--sp-5); }
