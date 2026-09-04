@@ -70,7 +70,9 @@ export default function MapView(props: Props) {
   const repaint = () => {
     const map = mapRef.current;
     if (!map || !map.getLayer('structures')) return;
-    map.setPaintProperty('structures', 'fill-color', colorExpr());
+    const colors = colorExpr();
+    map.setPaintProperty('structures', 'fill-color', colors);
+    map.setPaintProperty('structures-line', 'line-color', colors);
     const sel = propsRef.current.selectedId;
     const f = ['==', ['get', 'OBJECTID'], sel ?? -1] as any;
     map.setFilter('selection', f);
@@ -199,28 +201,48 @@ export default function MapView(props: Props) {
 
       map.addSource('structures', { type: 'geojson', data: EMPTY as any });
 
-      // The footprint is the mark at every zoom. A proxy dot layer used to stand
-      // in below z16, but it overlapped the polygons through the cross-fade and
-      // read as clutter over imagery.
+      /* The class colour is carried by the outline, not the fill, so the roof
+       * stays visible underneath and an officer can compare what the model says
+       * against what the imagery shows without toggling anything off.
+       *
+       * The fill does not disappear, it recedes. Two things still need it: at
+       * z14 a house is three pixels across, where an outline and a fill are the
+       * same picture and the city has to read as mass; and MapLibre hit-tests
+       * clicks against the fill, so a hollow polygon would only be selectable
+       * on its edge. It therefore drops to a wash that fades as the outline
+       * takes over. */
       map.addLayer({
         id: 'structures',
         type: 'fill',
         source: 'structures',
         paint: {
           'fill-color': colorExpr(),
-          // Slightly softer where footprints are only a few pixels across, so a
-          // dense sector reads as texture rather than noise.
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0.7, 16.5, 0.85],
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0.55, 16, 0.22, 18, 0.12],
         },
       });
+
+      /* A dark casing under the coloured outline. Without it a mid-tone class
+       * on a bright roof loses its edge, and the lighter classes disappear over
+       * pale ground entirely. */
+      map.addLayer({
+        id: 'structures-casing',
+        type: 'line',
+        source: 'structures',
+        paint: {
+          'line-color': 'rgba(6,14,13,.55)',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 15, 0.8, 17, 2.2, 19, 3.4],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 14.5, 0, 15.5, 1],
+        },
+      });
+
       map.addLayer({
         id: 'structures-line',
         type: 'line',
         source: 'structures',
         paint: {
-          'line-color': 'rgba(6,14,13,.8)',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 16, 0.4, 19, 1.1],
-          'line-opacity': ['interpolate', ['linear'], ['zoom'], 15.5, 0, 16.5, 1],
+          'line-color': colorExpr(),
+          'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.6, 17, 1.4, 19, 2.2],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0.6, 15.5, 1],
         },
       });
 
@@ -231,8 +253,10 @@ export default function MapView(props: Props) {
         filter: ['==', ['get', 'OBJECTID'], -1] as any,
         paint: {
           'line-color': token('--select', '#ffffff'),
-          'line-width': 2,
-          'line-opacity': 0.95,
+          // Wider than the class outline it now sits beside, or the selected
+          // building would be no louder than its neighbours.
+          'line-width': ['interpolate', ['linear'], ['zoom'], 14, 2, 17, 3, 19, 4],
+          'line-opacity': 1,
         },
       });
       map.addLayer({
