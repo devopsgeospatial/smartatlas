@@ -74,6 +74,20 @@ let badFloors = 0;
 for (let i = 0; i < n; i++) if (floors[i] > 60) badFloors++;
 check('floor counts plausible', badFloors === 0);
 
+/* Ground confirmation is a headline tile, and it is the one aggregate with no
+ * array to cross-check it against — stats.json is the only copy. A source
+ * revision once shipped this field as the string "No" instead of null, which
+ * plain truthiness in the pipeline read as confirmed and turned 2.2% into 100%.
+ * A survey covering every structure in the city is not a plausible figure, so
+ * anything at or near total is treated as that bug rather than as good news. */
+const gc = stats.buildings.groundConfirmed;
+const gcPct = (gc / stats.buildings.total) * 100;
+check(
+  'ground-confirmed count is plausible',
+  gc > 0 && gcPct < 50,
+  `${gc.toLocaleString()} of ${stats.buildings.total.toLocaleString()} (${gcPct.toFixed(2)}%)`,
+);
+
 /* ---- footprint geometry -------------------------------------------------- */
 const g = asBuffer('public/data/geometry.bin');
 const gmagic = new TextDecoder().decode(new Uint8Array(g, 0, 5));

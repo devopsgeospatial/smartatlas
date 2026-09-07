@@ -33,6 +33,22 @@ YEAR_ORDER = ["2025", "2023"]
 YEAR_INDEX = {y: i for i, y in enumerate(YEAR_ORDER)}
 
 
+# Tokens the source has used for an affirmative. The layer has shipped this
+# field as null/"Yes" and as "No"/"Yes" in different revisions, and plain
+# truthiness reads the string "No" as confirmed — which silently turned a 2.2%
+# verification rate into 100%. Test the value, never its truthiness.
+AFFIRMATIVE = {"yes", "y", "true", "t", "1"}
+
+
+def is_confirmed(v):
+    """True only for an explicit affirmative; anything else is unconfirmed."""
+    if v is None or v is True or v is False:
+        return v is True
+    if isinstance(v, (int, float)):
+        return v == 1
+    return str(v).strip().lower() in AFFIRMATIVE
+
+
 def zone_code(raw):
     """Pull 'R1A' out of 'R1A-Low density residential densification zone'."""
     if not raw:
@@ -189,6 +205,10 @@ def build_buildings():
     zone_labels = {}
     ground = 0
     n = 0
+    # Codes the taxonomy does not know. They are packed as 255, which every
+    # lens and the map itself skip, so without this they vanish without trace.
+    unknown_use = Counter()
+    unknown_year = Counter()
 
     for feat in iter_features(BUILDINGS):
         p = feat.get("properties") or {}
@@ -212,6 +232,10 @@ def build_buildings():
 
         lons.append(c[0])
         lats.append(c[1])
+        if use not in USE_INDEX:
+            unknown_use[use] += 1
+        if year not in YEAR_INDEX:
+            unknown_year[year] += 1
         uses.append(USE_INDEX.get(use, 255))
         years.append(YEAR_INDEX.get(year, 255))
 
@@ -246,12 +270,17 @@ def build_buildings():
         by_district[(p.get("District") or "").strip()] += 1
         by_sector[(p.get("Sector") or "").strip()] += 1
         by_status[(p.get("status") or "").strip()] += 1
-        if p.get("Ground-Confirmed"):
+        if is_confirmed(p.get("Ground-Confirmed")):
             ground += 1
 
         n += 1
         if n % 100000 == 0:
             print(f"  ...{n:,} structures", flush=True)
+
+    for label, counter in (("use code", unknown_use), ("acquisition year", unknown_year)):
+        for value, count in counter.most_common():
+            print(f"  WARNING: {count:,} structures carry {label} {value!r}, which is not in the "
+                  f"taxonomy — they are excluded from every lens and from the map", flush=True)
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "buildings.bin"), "wb") as f:
