@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Dossier from './components/Dossier';
 import ExportMenu from './components/ExportMenu';
+import FilterBar from './components/FilterBar';
 import FilterRail from './components/FilterRail';
 import LensPanel from './components/LensPanel';
 import MapView, { type FlyTarget } from './components/MapView';
@@ -188,14 +189,16 @@ export default function App() {
 
       {!dataset && !error && <LoadBar progress={progress} />}
 
+      <FilterBar
+        filters={filters}
+        selection={selection}
+        admin={dataset ? dataset.adminIndex : null}
+        onChange={setFilters}
+        onZoomToArea={zoomToArea}
+      />
+
       <div className="workspace">
-        <FilterRail
-          filters={filters}
-          selection={selection}
-          admin={dataset ? dataset.adminIndex : null}
-          onChange={setFilters}
-          onZoomToArea={zoomToArea}
-        />
+        <FilterRail filters={filters} selection={selection} onChange={setFilters} />
 
         <MapView
           dataset={dataset}

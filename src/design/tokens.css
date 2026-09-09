@@ -94,7 +94,9 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
 
   /* Left rail and right panel are deliberately the same width. */
-  --rail-w: 300px;
+  /* The rail holds only detection year and the running total now that the
+     rest of the filters sit across the top. */
+  --rail-w: 210px;
   --dossier-w: 300px;
   --topbar-h: 48px;
 
