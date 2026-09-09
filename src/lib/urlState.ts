@@ -44,7 +44,10 @@ export function readUrl(): AppUrlState {
   const filters: Filters = {
     uses: readList(p.get('use'), ORDER, DEFAULT_FILTERS.uses),
     years: readList(p.get('year'), YEAR_ORDER, DEFAULT_FILTERS.years),
+    district: p.get('district') || 'ALL',
     sector: p.get('sector') || 'ALL',
+    cell: p.get('cell') || 'ALL',
+    village: p.get('village') || 'ALL',
     minScore: Math.min(1, Math.max(0, num(p.get('score'), 0))),
   };
 
@@ -69,7 +72,9 @@ export function writeUrl(state: AppUrlState) {
   if (state.lens !== 'atlas') p.set('lens', state.lens);
   if (state.filters.uses.length !== ORDER.length) p.set('use', state.filters.uses.join(','));
   if (state.filters.years.length !== YEAR_ORDER.length) p.set('year', state.filters.years.join(','));
-  if (state.filters.sector !== 'ALL') p.set('sector', state.filters.sector);
+  for (const k of ['district', 'sector', 'cell', 'village'] as const) {
+    if (state.filters[k] !== 'ALL') p.set(k, state.filters[k]);
+  }
   if (state.filters.minScore > 0) p.set('score', String(state.filters.minScore));
   if (state.camera) {
     p.set(

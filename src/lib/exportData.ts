@@ -7,6 +7,7 @@
  * -------------------------------------------------------------------------- */
 
 import { LABELS, ORDER, useLabel } from '../constants';
+import { areaLevel } from './filters';
 import { taxFor, type RawStats, type Selection } from '../services/dataset';
 import type { BFeature, Filters, LensId } from '../types';
 
@@ -118,7 +119,15 @@ const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleStrin
 const ha = (sqm: number) => Math.round(sqm / 10000).toLocaleString();
 
 function scope(f: Filters): string {
-  const bits: string[] = [f.sector === 'ALL' ? 'all of Kigali' : `${f.sector} sector`];
+  const level = areaLevel(f);
+  const bits: string[] = [
+    level === 'city'
+      ? 'all of Kigali'
+      : [f.village, f.cell, f.sector, f.district]
+          .filter((x) => x && x !== 'ALL')
+          .reverse()
+          .join(' · '),
+  ];
   if (f.uses.length < ORDER.length) {
     bits.push(f.uses.map((u) => LABELS[u] || u).join(', '));
   }
@@ -151,7 +160,7 @@ export function buildReport(input: ReportInput): string {
   /* The parcel tables follow the same area as the rest of the report. Narrowed
    * to one sector, a district split and a sector ranking would both be a single
    * row, so that section becomes the zone mix inside the sector instead. */
-  const t = taxFor(tax, filters.sector);
+  const t = taxFor(tax, filters);
 
   const vacantSection =
     t.byDistrict && t.bySector

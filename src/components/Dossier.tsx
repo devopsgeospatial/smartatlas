@@ -67,7 +67,21 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
         </div>
 
         <div className="dhead-upi mono">{p.UPI || `#${p.OBJECTID}`}</div>
-        <div className="dhead-place">{p.sector || 'Sector not recorded'}</div>
+        {/* Read outward, the way an address is spoken: the village first, then
+            what contains it. An officer navigating to this building needs the
+            village; a manager reading over their shoulder needs the district. */}
+        <div className="dhead-place">
+          {p.village ? (
+            <>
+              <b>{p.village}</b>
+              <span className="dhead-path">
+                {[p.cell, p.sector, p.district].filter(Boolean).join(' · ')}
+              </span>
+            </>
+          ) : (
+            p.sector || 'Location not recorded'
+          )}
+        </div>
 
         <div className="dfacts">
           <div>

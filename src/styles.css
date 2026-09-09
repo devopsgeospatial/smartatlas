@@ -975,6 +975,23 @@ button {
 .chip.critical { color: var(--critical); }
 .chip.neutral { color: var(--tx-3); border-color: var(--line-2); }
 
+/* ---------- area cascade --------------------------------------------------- */
+/* Four levels stacked. A disabled level still shows why it is disabled, so the
+   rail explains the hierarchy rather than just refusing input. */
+.arealevels { display: grid; gap: var(--sp-3); }
+.arealevel { display: grid; gap: var(--sp-1); }
+.arealevel-label { color: var(--tx-3); }
+.arealevel .select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.dhead-path {
+  display: block;
+  font-size: 10.5px;
+  color: var(--tx-3);
+  margin-top: 2px;
+}
+
 /* ---------- empty / loading state ----------------------------------------- */
 .empty {
   display: flex;

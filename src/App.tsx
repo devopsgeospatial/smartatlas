@@ -14,7 +14,8 @@ import {
   type LoadProgress,
   type Selection,
 } from './services/dataset';
-import type { BFeature, CameraState, Filters, LensId, Sector } from './types';
+import { CITY_BBOX } from './sectors';
+import type { BBox, BFeature, CameraState, Filters, LensId, Sector } from './types';
 
 const LENSES: { id: LensId; label: string }[] = [
   { id: 'atlas', label: 'Atlas' },
@@ -104,17 +105,20 @@ export default function App() {
     [showToast],
   );
 
-  const zoomToSector = useCallback((s: Sector | null) => {
-    if (!s) return;
-    setFlyTo({ lat: 0, lon: 0, bbox: s.bb, nonce: flyNonce.current++ });
+  /** Fly to an administrative extent. Null returns to the whole city. */
+  const zoomToArea = useCallback((bb: BBox | null) => {
+    setFlyTo({ lat: 0, lon: 0, bbox: bb ?? CITY_BBOX, nonce: flyNonce.current++ });
   }, []);
 
+  /* Searching a sector sets its district too. The rail cascades, so a sector
+   * without its parent would leave the district select reading "All Kigali"
+   * while the map showed one sector. */
   const goToSector = useCallback(
     (s: Sector) => {
-      setFilters((f) => ({ ...f, sector: s.s }));
-      zoomToSector(s);
+      setFilters((f) => ({ ...f, district: s.d, sector: s.s, cell: 'ALL', village: 'ALL' }));
+      zoomToArea(s.bb);
     },
-    [zoomToSector],
+    [zoomToArea],
   );
 
   const goToUpi = useCallback(
@@ -188,8 +192,9 @@ export default function App() {
         <FilterRail
           filters={filters}
           selection={selection}
+          admin={dataset ? dataset.adminIndex : null}
           onChange={setFilters}
-          onZoomToSector={zoomToSector}
+          onZoomToArea={zoomToArea}
         />
 
         <MapView

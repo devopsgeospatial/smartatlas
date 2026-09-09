@@ -9,6 +9,8 @@ export interface BuildingProps {
   province?: string;
   score?: number | null;
   Height?: number | null;
+  cell?: string;
+  village?: string;
   estimated_floor?: number | null;
   area?: number | null;
   acquisition_date?: string;
@@ -38,10 +40,19 @@ export interface BFeature {
 export interface Filters {
   uses: string[];
   years: string[];
+  /* The area, as four levels of one hierarchy. 'ALL' means unset. The rail only
+   * ever offers a level once its parent is chosen, so comparing names at each
+   * level is unambiguous even though village names repeat across the city. */
+  district: string;
   sector: string;
+  cell: string;
+  village: string;
   /** Minimum model confidence, 0 = off. */
   minScore: number;
 }
+
+/** How far down the hierarchy the current selection reaches. */
+export type AreaLevel = 'city' | 'district' | 'sector' | 'cell' | 'village';
 
 export interface Stats {
   total: number;

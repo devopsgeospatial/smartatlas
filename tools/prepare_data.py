@@ -8,6 +8,7 @@ Inputs (kept out of the repo — they are hundreds of megabytes):
 Outputs (public/data/):
   stats.json      every aggregate the panels need — a few kilobytes, loaded in one request
   buildings.bin   one record per structure: centroid + attributes, as packed typed arrays
+                  (format SPAB2: carries an administrative unit index per record)
   geometry.bin    the footprint outlines, as Int16 deltas from each centroid
   upis.txt        parcel identifiers, newline-delimited, index-aligned with buildings.bin
 
@@ -26,6 +27,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILDINGS = os.path.join(ROOT, "Kigali_Buildings.geojson")
 TAX_DBF = os.path.join(ROOT, "tax.dbf")
 OUT = os.path.join(ROOT, "public", "data")
+
+ADMIN = os.path.join(ROOT, "public", "data", "admin.json")
 
 USE_ORDER = ["CM", "CMI", "RAP", "ROR", "RI", "PI", "I"]
 USE_INDEX = {c: i for i, c in enumerate(USE_ORDER)}
@@ -47,6 +50,26 @@ def is_confirmed(v):
     if isinstance(v, (int, float)):
         return v == 1
     return str(v).strip().lower() in AFFIRMATIVE
+
+
+def load_admin_units():
+    """
+    The village table written by tools/prepare_admin.py, as a path -> row map.
+
+    A village is identified by its full path and never by its name: 1,163
+    villages share 746 names in Kigali, so a name alone points at several
+    different places. One Uint16 index into this table carries a building's
+    whole hierarchy — district, sector and cell all follow from the row.
+    """
+    if not os.path.exists(ADMIN):
+        raise SystemExit(
+            "public/data/admin.json is missing — run tools/prepare_admin.py first")
+    with io.open(ADMIN, encoding="utf-8") as f:
+        units = json.load(f)["units"]
+    index = {(u["d"], u["s"], u["c"], u["v"]): i for i, u in enumerate(units)}
+    if len(index) != len(units):
+        raise SystemExit("admin.json holds duplicate village paths")
+    return units, index
 
 
 def zone_code(raw):
@@ -183,10 +206,10 @@ def read_dbf(path):
 
 
 # ---------------------------------------------------------------- buildings
-def build_buildings():
+def build_buildings(admin_index):
     lons, lats = [], []
     uses, years, floors, scores, areas, heights = [], [], [], [], [], []
-    sector_idx, zone_idx = [], []
+    admin_idx, zone_idx = [], []
     # Footprint outlines: Int16 deltas from the centroid at 1e-6 degrees
     # (about 0.11 m), which is far finer than the footprints themselves.
     gx = array.array("h")
@@ -209,6 +232,7 @@ def build_buildings():
     # lens and the map itself skip, so without this they vanish without trace.
     unknown_use = Counter()
     unknown_year = Counter()
+    unmatched_admin = Counter()
 
     for feat in iter_features(BUILDINGS):
         p = feat.get("properties") or {}
@@ -252,7 +276,21 @@ def build_buildings():
         if sec not in sector_key:
             sector_key[sec] = len(sector_names)
             sector_names.append(sec)
-        sector_idx.append(min(254, sector_key[sec]))
+
+        # The administrative unit, as one index into the village table. 65535
+        # means the path matched no unit; those records are excluded from every
+        # area filter exactly as an unknown use code is.
+        path = (
+            (p.get("District") or "").strip(),
+            sec,
+            (p.get("Cell") or "").strip(),
+            (p.get("Village") or "").strip(),
+        )
+        unit = admin_index.get(path)
+        if unit is None:
+            unmatched_admin[path] += 1
+            unit = 65535
+        admin_idx.append(unit)
         if zone not in zone_key:
             zone_key[zone] = len(zone_names)
             zone_names.append(zone)
@@ -277,6 +315,13 @@ def build_buildings():
         if n % 100000 == 0:
             print(f"  ...{n:,} structures", flush=True)
 
+    if unmatched_admin:
+        total_unmatched = sum(unmatched_admin.values())
+        print(f"  WARNING: {total_unmatched:,} structures over {len(unmatched_admin):,} paths "
+              f"match no village in admin.json — excluded from every area filter", flush=True)
+        for path, count in unmatched_admin.most_common(5):
+            print(f"           {' / '.join(x or '(blank)' for x in path)}  {count:,}", flush=True)
+
     for label, counter in (("use code", unknown_use), ("acquisition year", unknown_year)):
         for value, count in counter.most_common():
             print(f"  WARNING: {count:,} structures carry {label} {value!r}, which is not in the "
@@ -284,7 +329,7 @@ def build_buildings():
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "buildings.bin"), "wb") as f:
-        f.write(b"SPAB1")
+        f.write(b"SPAB2")
         f.write(struct.pack("<I", n))
         f.write(struct.pack(f"<{n}f", *lons))
         f.write(struct.pack(f"<{n}f", *lats))
@@ -294,7 +339,7 @@ def build_buildings():
         f.write(bytes(scores))
         f.write(struct.pack(f"<{n}H", *areas))
         f.write(struct.pack(f"<{n}H", *heights))
-        f.write(bytes(sector_idx))
+        f.write(struct.pack(f"<{n}H", *admin_idx))
         f.write(bytes(zone_idx))
 
     goff.append(len(gx))  # terminating offset
@@ -414,8 +459,10 @@ def main():
 
     # Buildings first: its sector names are the canonical spellings, and the tax
     # pass folds its own onto them.
+    units, admin_index = load_admin_units()
+    print(f"admin.json: {len(units):,} villages")
     print("reading Kigali_Buildings.geojson ...")
-    buildings = build_buildings()
+    buildings = build_buildings(admin_index)
     print("reading tax.dbf ...")
     tax = build_tax(buildings["sectorNames"])
 

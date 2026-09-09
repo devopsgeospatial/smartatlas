@@ -1,6 +1,6 @@
 import { COLORS, LABELS, ORDER, YEAR_ORDER } from '../constants';
 import Bars, { type BarDatum } from './Bars';
-import { SECTOR_LIST } from '../sectors';
+import { areaLevel } from '../lib/filters';
 import { taxFor, type LoadProgress, type RawStats, type Selection } from '../services/dataset';
 import type { Filters, LensId } from '../types';
 
@@ -54,12 +54,17 @@ function Pending({ label, why }: { label: string; why: string }) {
  * Names the area every figure below belongs to. All three lenses carry it, so a
  * narrowed panel can never be mistaken for a city-wide one.
  */
-function Scope({ sector }: { sector: string }) {
-  if (sector === 'ALL') return <p className="lens-scope">All Kigali</p>;
-  const district = SECTOR_LIST.find((s) => s.s === sector)?.d;
+function Scope({ filters }: { filters: Filters }) {
+  const level = areaLevel(filters);
+  if (level === 'city') return <p className="lens-scope">All Kigali</p>;
+  const name = filters[level];
+  const above = (['cell', 'sector', 'district'] as const)
+    .filter((k) => k !== level && filters[k] !== 'ALL')
+    .map((k) => filters[k]);
   return (
     <p className="lens-scope">
-      {sector} sector{district && <span className="lens-scope-d"> · {district}</span>}
+      {name} {level}
+      {above.length > 0 && <span className="lens-scope-d"> · {above.join(' · ')}</span>}
     </p>
   );
 }
@@ -100,7 +105,7 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
   }));
 
   if (lens === 'revenue') {
-    const t = taxFor(tax, filters.sector);
+    const t = taxFor(tax, filters);
     /* A parcel carries no predicted use, no detection year and no model score,
      * so only the area filter can narrow this lens. Saying so is better than
      * letting the figures sit unchanged and look broken. */
@@ -113,7 +118,7 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
       <div className="lens">
         <h3 className="lens-title">Revenue</h3>
 
-        <Scope sector={t.scope} />
+        <Scope filters={filters} />
 
         <div className="stat2grid">
           <Stat label="Vacant taxable parcels" value={n(t.vacant)} />
@@ -124,6 +129,14 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
           <Pending label="Not declared" why="RRA tax register not yet joined" />
           <Pending label="Use differs from declared" why="Declared use empty on all records" />
         </div>
+
+        {t.coarserThanAsked && (
+          <p className="lens-note">
+            Parcel data is held to sector level. These figures are for{' '}
+            <b>{t.scope} sector</b>, not the {filters.village !== 'ALL' ? 'village' : 'cell'} you
+            selected — the structures above it are.
+          </p>
+        )}
 
         {buildingFiltersOn && (
           <p className="lens-note">
@@ -199,7 +212,7 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
     return (
       <div className="lens">
         <h3 className="lens-title">Zones</h3>
-        <Scope sector={filters.sector} />
+        <Scope filters={filters} />
 
         <div className="stat2grid">
           <Stat label="Structures" value={n(total)} />
@@ -225,23 +238,23 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
   return (
     <div className="lens">
       <h3 className="lens-title">Kigali</h3>
-      <Scope sector={filters.sector} />
+      <Scope filters={filters} />
 
       <div className="stat2grid">
         <Stat label="Structures" value={n(selection?.matches ?? b.total)} />
         <Stat label="New since 2023" value={n(newCount)} />
-        <Stat label="Vacant taxable parcels" value={n(taxFor(tax, filters.sector).vacant)} />
+        <Stat label="Vacant taxable parcels" value={n(taxFor(tax, filters).vacant)} />
         <Stat
           label="Field verified"
           value={n(b.groundConfirmed)}
-          note={filters.sector === 'ALL' ? undefined : 'citywide — not held per sector'}
+          note={areaLevel(filters) === 'city' ? undefined : 'citywide — not held by area'}
         />
       </div>
 
       <Bars title="Structures by use" data={useBars} />
       {/* A district chart under a sector filter would be one bar, and the other
           two would still be showing the whole city. */}
-      {filters.sector === 'ALL' && districtBars.length > 0 && (
+      {areaLevel(filters) === 'city' && districtBars.length > 0 && (
         <Bars title="Structures by district" data={districtBars} />
       )}
     </div>

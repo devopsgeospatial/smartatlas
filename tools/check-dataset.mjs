@@ -34,10 +34,10 @@ const floors = new Uint8Array(buf, o, n); o += n;
 const score = new Uint8Array(buf, o, n); o += n;
 const area = new Uint16Array(buf.slice(o, o + n * 2)); o += n * 2;
 const height = new Uint16Array(buf.slice(o, o + n * 2)); o += n * 2;
-const sector = new Uint8Array(buf, o, n); o += n;
+const admin = new Uint16Array(buf.slice(o, o + n * 2)); o += n * 2;
 const zone = new Uint8Array(buf, o, n); o += n;
 
-check('magic is SPAB1', magic === 'SPAB1', magic);
+check('magic is SPAB2', magic === 'SPAB2', magic);
 check('record count matches stats.json', n === stats.buildings.total, n.toLocaleString());
 check('all attribute bytes consumed', o === buf.byteLength, `${o} of ${buf.byteLength}`);
 
@@ -61,13 +61,24 @@ for (const y of YEARS) {
     `${(byYear[y] || 0).toLocaleString()} vs ${(stats.buildings.byYear[y] || 0).toLocaleString()}`);
 }
 
-const sn = stats.buildings.sectorNames, zn = stats.buildings.zoneNames;
-let badSector = 0, badZone = 0;
+const zn = stats.buildings.zoneNames;
+let badZone = 0;
+for (let i = 0; i < n; i++) if (zone[i] >= zn.length) badZone++;
+
+const adminTable = JSON.parse(readFileSync('public/data/admin.json', 'utf8'));
+let badAdmin = 0;
+const unitSeen = new Set();
 for (let i = 0; i < n; i++) {
-  if (sector[i] >= sn.length) badSector++;
-  if (zone[i] >= zn.length) badZone++;
+  const a = admin[i];
+  if (a === 65535) continue;
+  if (a >= adminTable.units.length) badAdmin++;
+  else unitSeen.add(a);
 }
-check('sector indices resolve', badSector === 0, `${sn.length} sectors`);
+check('admin indices resolve', badAdmin === 0, `${unitSeen.size} villages carry structures`);
+const unmatchedAdmin = (() => { let k = 0; for (let i = 0; i < n; i++) if (admin[i] === 65535) k++; return k; })();
+/* An admin path that matches no village silently drops the structure from every
+ * area filter, so it is worth a line even when it is zero. */
+check('structures all match a village', unmatchedAdmin === 0, `${unmatchedAdmin} unmatched`);
 check('zone indices resolve', badZone === 0, `${zn.length} zones`);
 
 let badFloors = 0;
@@ -132,7 +143,11 @@ console.log(
   `\nrow 0: ${lat[0].toFixed(6)}, ${lon[0].toFixed(6)}  ` +
   `use=${ORDER[use[0]]} year=${YEARS[year[0]]} floors=${floors[0]} ` +
   `area=${area[0]}m² height=${(height[0] / 10).toFixed(1)}m ` +
-  `sector=${sn[sector[0]]} zone=${zn[zone[0]]}`,
+  `zone=${zn[zone[0]]}`,
+);
+const u0 = adminTable.units[admin[0]];
+console.log(
+  `admin 0: ${u0 ? [u0.d, u0.s, u0.c, u0.v].join(' / ') : 'unmatched'}`,
 );
 console.log(
   `ring 0: ${off[1] - off[0]} vertices, first at ` +

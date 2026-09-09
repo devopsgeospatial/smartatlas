@@ -27,6 +27,10 @@ const BASEMAPS: [Basemap, string][] = [
   ['dark', 'Dark'],
 ];
 
+/* Villages are fetched a zoom level before they can be seen, so the layer is
+ * already populated by the time it fades in rather than appearing a beat late. */
+const VILLAGE_LOAD_ZOOM = 12.5;
+
 export interface FlyTarget {
   lat: number;
   lon: number;
@@ -111,6 +115,28 @@ export default function MapView(props: Props) {
     propsRef.current.onFeatures(res.features);
   };
 
+  /* Villages are only fetched once the map first reaches the zoom where they
+   * would show. Loading 2.3 MB for a city-wide view nobody has zoomed into yet
+   * would spend the user's first impression on geometry they cannot see. */
+  const villagesRequested = useRef(false);
+  const maybeLoadVillages = () => {
+    const map = mapRef.current;
+    if (!map || villagesRequested.current || map.getZoom() < VILLAGE_LOAD_ZOOM) return;
+    villagesRequested.current = true;
+    fetch(new URL(`${import.meta.env.BASE_URL}data/villages.geojson`, window.location.href).href)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const src = mapRef.current?.getSource('villages') as GeoJSONSource | undefined;
+        if (data && src) src.setData(data);
+      })
+      .catch(() => {
+        // A missing boundary layer is a degraded map, not a broken one.
+        villagesRequested.current = false;
+      });
+  };
+
+  const onZoomChanged = () => maybeLoadVillages();
+
   const schedule = () => {
     window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(refresh, 80);
@@ -128,7 +154,14 @@ export default function MapView(props: Props) {
       maxZoom: 19,
       style: {
         version: 8,
-        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+        /* Glyphs are served from this app, not from a public font server.
+         * fonts.openmaptiles.org now answers every glyph request with its own
+         * landing page — HTML, status 200 — so MapLibre silently rendered no
+         * labels at all. Two Latin ranges of two faces is about 350 kB and
+         * removes the dependency entirely. */
+        glyphs:
+          new URL(`${import.meta.env.BASE_URL}fonts/`, window.location.href).href +
+          '{fontstack}/{range}.pbf',
         sources: {
           sat: {
             type: 'raster',
@@ -145,12 +178,12 @@ export default function MapView(props: Props) {
           },
           streets: {
             type: 'raster',
-            tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],
+            tiles: [ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}'],
             tileSize: 256,
           },
           dark: {
             type: 'raster',
-            tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],
+            tiles: [ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
             tileSize: 256,
           },
         },
@@ -183,9 +216,77 @@ export default function MapView(props: Props) {
     );
 
     map.on('load', () => {
-      map.addSource('bounds', {
-        type: 'geojson',
-        data: `${import.meta.env.BASE_URL}boundaries.geojson`,
+      const base = import.meta.env.BASE_URL;
+
+      /* Every GeoJSON source here is created empty and filled from a fetch on
+       * this thread, rather than handed a URL for MapLibre to fetch itself.
+       *
+       * A url-backed geojson source is loaded inside MapLibre's worker, and in
+       * this build that request never completes: the source stays unloaded, no
+       * error is raised, and the layer silently renders nothing. Relative and
+       * absolute URLs behave identically, so it is not URL resolution. The
+       * structures layer has always worked because it is given parsed data, and
+       * this simply does the same for the boundaries. */
+      const fillSource = (id: string, url: string) =>
+        fetch(new URL(url, window.location.href).href)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            const src = mapRef.current?.getSource(id) as GeoJSONSource | undefined;
+            if (data && src) src.setData(data);
+          })
+          .catch(() => {
+            /* A boundary that fails to load is a plainer map, not a broken one. */
+          });
+
+      /* Administrative boundaries, drawn coarse to fine.
+       *
+       * The cartography follows one rule: a level appears when it is the finest
+       * thing you could still read, and fades once the level below has taken
+       * over. Districts carry the whole city; villages only earn their ink once
+       * a few of them fill the screen. Weight decreases with level so the
+       * hierarchy survives having three of them on screen at once, and every
+       * label is haloed because these sit over satellite imagery.
+       *
+       * Villages are 2.3 MB, so they load only when the map first crosses into
+       * the zoom band where they would be visible. */
+      map.addSource('bounds', { type: 'geojson', data: EMPTY as any });
+      map.addSource('cells', { type: 'geojson', data: EMPTY as any });
+      map.addSource('villages', { type: 'geojson', data: EMPTY as any });
+      fillSource('bounds', `${base}boundaries.geojson`);
+      fillSource('cells', `${base}data/cells.geojson`);
+
+      /* Cells take the heavier face, villages the lighter one: weight carries
+       * the hierarchy when both are on screen together. */
+      const FONT_CELL = ['Open Sans Semibold'];
+      const FONT_VILLAGE = ['Noto Sans Regular'];
+      const halo = {
+        'text-halo-width': 1.6,
+        'text-halo-blur': 0.4,
+      };
+
+      // Villages: the finest, thinnest, first to go.
+      map.addLayer({
+        id: 'village-line',
+        type: 'line',
+        source: 'villages',
+        minzoom: 13.5,
+        paint: {
+          'line-color': token('--tx-2', '#a5b6b4'),
+          'line-width': ['interpolate', ['linear'], ['zoom'], 13.5, 0.6, 17, 1.2],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 15, 0.7],
+          'line-dasharray': [2, 2],
+        },
+      });
+      map.addLayer({
+        id: 'cell-line',
+        type: 'line',
+        source: 'cells',
+        minzoom: 11,
+        paint: {
+          'line-color': token('--tx-2', '#a5b6b4'),
+          'line-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 16, 1.4],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 12.5, 0.55],
+        },
       });
       map.addLayer({
         id: 'bounds-line',
@@ -193,9 +294,56 @@ export default function MapView(props: Props) {
         source: 'bounds',
         paint: {
           'line-color': token('--tx-2', '#a5b6b4'),
-          'line-width': 1,
-          'line-opacity': 0.4,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 2.2],
+          'line-opacity': 0.55,
           'line-dasharray': [3, 2],
+        },
+      });
+
+      /* Labels sit above every boundary line and below nothing else. Ranges
+       * overlap by half a zoom level so a name never blinks out before its
+       * replacement has appeared. */
+      map.addLayer({
+        id: 'cell-label',
+        type: 'symbol',
+        source: 'cells',
+        minzoom: 12.5,
+        maxzoom: 16,
+        layout: {
+          'text-field': ['get', 'c'],
+          'text-font': FONT_CELL,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 12.5, 10, 15.5, 13],
+          'text-letter-spacing': 0.06,
+          'text-transform': 'uppercase',
+          'text-padding': 6,
+          'symbol-placement': 'point',
+        },
+        paint: {
+          'text-color': token('--tx-1', '#e9f0ef'),
+          'text-halo-color': token('--bg-0', '#070c0d'),
+          ...halo,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13.2, 1, 15.4, 1, 16, 0],
+        },
+      });
+      maybeLoadVillages();
+
+      map.addLayer({
+        id: 'village-label',
+        type: 'symbol',
+        source: 'villages',
+        minzoom: 15,
+        layout: {
+          'text-field': ['get', 'v'],
+          'text-font': FONT_VILLAGE,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 15, 10.5, 18, 13],
+          'text-padding': 5,
+          'symbol-placement': 'point',
+        },
+        paint: {
+          'text-color': token('--tx-2', '#a5b6b4'),
+          'text-halo-color': token('--bg-0', '#070c0d'),
+          ...halo,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.4, 1],
         },
       });
 
@@ -320,6 +468,16 @@ export default function MapView(props: Props) {
         propsRef.current.onCamera({ lat: c.lat, lon: c.lng, zoom: map.getZoom() });
         schedule();
       });
+      map.on('zoomend', onZoomChanged);
+
+      /* Order matters and MapLibre draws in insertion order. Boundary lines
+       * belong under the buildings — they are context, not subject — but the
+       * names belong above everything, or a dense sector buries them under its
+       * own footprints. The layers are created in one block for legibility and
+       * the two label layers are lifted here. */
+      for (const id of ['cell-label', 'village-label']) {
+        if (map.getLayer(id)) map.moveLayer(id);
+      }
 
       readyRef.current = true;
       repaint();
@@ -368,15 +526,24 @@ export default function MapView(props: Props) {
     const t = props.flyTo;
     if (!map || !t) return;
     if (t.bbox) {
+      /* Duration scales with how far the camera actually travels, so stepping
+       * from a cell to one of its villages is a short move and jumping across
+       * the city is not an abrupt one. easeTo/fitBounds with a fixed duration
+       * made the small steps feel sluggish and the large ones feel violent. */
+      const c = map.getCenter();
+      const midX = (t.bbox[0] + t.bbox[2]) / 2;
+      const midY = (t.bbox[1] + t.bbox[3]) / 2;
+      const travel = Math.hypot(midX - c.lng, midY - c.lat);
+      const duration = Math.round(Math.min(1600, 550 + travel * 9000));
       map.fitBounds(
         [
           [t.bbox[0], t.bbox[1]],
           [t.bbox[2], t.bbox[3]],
         ],
-        { padding: 48, duration: 600 },
+        { padding: 56, duration, essential: true, maxZoom: 17.5 },
       );
     } else {
-      map.flyTo({ center: [t.lon, t.lat], zoom: t.zoom ?? 17, duration: 700 });
+      map.flyTo({ center: [t.lon, t.lat], zoom: t.zoom ?? 17, duration: 700, essential: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.flyTo?.nonce]);

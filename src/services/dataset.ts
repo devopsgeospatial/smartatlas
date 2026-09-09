@@ -40,43 +40,165 @@ export interface TaxTable {
  * chart that silently still shows the whole city.
  */
 export interface TaxView {
-  /** 'ALL', or the sector name. */
+  /** The name of the area these figures are for, or 'ALL'. */
   scope: string;
-  /** The sector's district. Null city-wide. */
+  /** The district containing it. Null city-wide. */
   district: string | null;
   vacant: number;
   sqm: number;
   byZone: Record<string, number>;
   byDistrict: Record<string, number> | null;
   bySector: TaxTable['vacantBySector'] | null;
+  /**
+   * The finest level the parcel table can actually answer at.
+   *
+   * The tax extract is aggregated to sector. A cell or village selection
+   * therefore cannot narrow it further, and the panel says so rather than
+   * showing the sector's figures under a village's name.
+   */
+  servedAt: 'city' | 'district' | 'sector';
+  /** True when the user asked for something finer than servedAt. */
+  coarserThanAsked: boolean;
 }
 
-/** Narrow the parcel figures to one sector, or hand back the whole city. */
-export function taxFor(tax: TaxTable, sector: string): TaxView {
-  if (sector === 'ALL') {
+/**
+ * Narrow the parcel figures as far as the tax extract allows.
+ *
+ * Buildings are held per village; parcels only per sector. Rather than pretend
+ * otherwise, this resolves to the deepest level it can serve and reports both
+ * that level and whether the request went deeper.
+ */
+export function taxFor(tax: TaxTable, f: Filters): TaxView {
+  const city = {
+    scope: 'ALL',
+    district: null,
+    vacant: tax.vacantDesignated,
+    sqm: tax.vacantSqm,
+    byZone: tax.vacantByZone,
+    byDistrict: tax.vacantByDistrict,
+    bySector: tax.vacantBySector,
+    servedAt: 'city' as const,
+    coarserThanAsked: false,
+  };
+  if (f.district === 'ALL') return city;
+
+  const deeperAsked = f.cell !== 'ALL' || f.village !== 'ALL';
+
+  if (f.sector === 'ALL') {
+    // Roll the sector rows up to the district; the extract has no district row
+    // carrying area, only a count.
+    const rows = tax.vacantBySector.filter((r) => r.district === f.district);
+    const byZone: Record<string, number> = {};
+    let vacant = 0;
+    let sqm = 0;
+    for (const r of rows) {
+      vacant += r.vacant;
+      sqm += r.sqm;
+      for (const [z, v] of Object.entries(r.byZone || {})) byZone[z] = (byZone[z] || 0) + v;
+    }
     return {
-      scope: 'ALL',
-      district: null,
-      vacant: tax.vacantDesignated,
-      sqm: tax.vacantSqm,
-      byZone: tax.vacantByZone,
-      byDistrict: tax.vacantByDistrict,
-      bySector: tax.vacantBySector,
+      scope: f.district,
+      district: f.district,
+      vacant,
+      sqm,
+      byZone,
+      byDistrict: null,
+      bySector: rows,
+      servedAt: 'district',
+      coarserThanAsked: false,
     };
   }
-  const row = tax.vacantBySector.find((r) => r.sector === sector);
+
+  const row = tax.vacantBySector.find((r) => r.sector === f.sector);
   /* A sector with no vacant parcels has no row at all. That is a real answer —
    * zero — not missing data, so it reports zero rather than falling back to the
    * city total, which would read as if the filter had been ignored. */
   return {
-    scope: sector,
-    district: row?.district ?? null,
+    scope: f.sector,
+    district: row?.district ?? f.district,
     vacant: row?.vacant ?? 0,
     sqm: row?.sqm ?? 0,
     byZone: row?.byZone ?? {},
     byDistrict: null,
     bySector: null,
+    servedAt: 'sector',
+    coarserThanAsked: deeperAsked,
   };
+}
+
+/** One village, and the path that identifies it. Written by prepare_admin.py. */
+export interface AdminUnit {
+  d: string;
+  s: string;
+  c: string;
+  v: string;
+  /** [w, s, e, n] — enough to fly to the unit before any boundary has loaded. */
+  bb: [number, number, number, number];
+  /** A point inside the unit, for a label. */
+  lp: [number, number] | null;
+}
+
+export interface AdminTable {
+  units: AdminUnit[];
+  districts: { d: string; bb: [number, number, number, number] }[];
+  sectors: { d: string; s: string; bb: [number, number, number, number] }[];
+  cells: { d: string; s: string; c: string; bb: [number, number, number, number] }[];
+}
+
+/**
+ * The hierarchy, resolved once into integer lookups.
+ *
+ * A building carries a single Uint16 pointing at a village row. Filtering by
+ * district would otherwise mean a string comparison per structure per frame, so
+ * each level gets its own index array over the unit table and every comparison
+ * stays integer.
+ */
+export interface AdminIndex {
+  table: AdminTable;
+  districtNames: string[];
+  /** Sector and cell keys are path-qualified: a name alone is not unique. */
+  sectorKeys: string[];
+  cellKeys: string[];
+  unitDistrict: Uint8Array;
+  unitSector: Uint8Array;
+  unitCell: Uint16Array;
+}
+
+export const SEP = '\u0001';
+
+export function buildAdminIndex(table: AdminTable): AdminIndex {
+  const districtNames: string[] = [];
+  const sectorKeys: string[] = [];
+  const cellKeys: string[] = [];
+  const dOf = new Map<string, number>();
+  const sOf = new Map<string, number>();
+  const cOf = new Map<string, number>();
+  const n = table.units.length;
+  const unitDistrict = new Uint8Array(n);
+  const unitSector = new Uint8Array(n);
+  const unitCell = new Uint16Array(n);
+
+  table.units.forEach((u, i) => {
+    if (!dOf.has(u.d)) {
+      dOf.set(u.d, districtNames.length);
+      districtNames.push(u.d);
+    }
+    const sk = u.d + SEP + u.s;
+    if (!sOf.has(sk)) {
+      sOf.set(sk, sectorKeys.length);
+      sectorKeys.push(sk);
+    }
+    const ck = sk + SEP + u.c;
+    if (!cOf.has(ck)) {
+      cOf.set(ck, cellKeys.length);
+      cellKeys.push(ck);
+    }
+    unitDistrict[i] = dOf.get(u.d)!;
+    unitSector[i] = sOf.get(sk)!;
+    unitCell[i] = cOf.get(ck)!;
+  });
+
+  return { table, districtNames, sectorKeys, cellKeys, unitDistrict, unitSector, unitCell };
 }
 
 export interface RawStats {
@@ -107,7 +229,8 @@ export interface Dataset {
   score: Uint8Array;
   area: Uint16Array;
   height: Uint16Array;
-  sector: Uint8Array;
+  /** Index into admin.units. 65535 when the path matched no village. */
+  admin: Uint16Array;
   zone: Uint8Array;
   /** Footprint outlines: vertex range per structure, deltas from the centroid. */
   ringStart: Uint32Array;
@@ -115,7 +238,7 @@ export interface Dataset {
   dy: Int16Array;
   upis: string[];
   stats: RawStats;
-  sectorNames: string[];
+  adminIndex: AdminIndex;
   zoneNames: string[];
 }
 
@@ -200,8 +323,9 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
       },
     );
 
-  const [statsRes, buf, geomBuf, upiBuf] = await Promise.all([
+  const [statsRes, adminRes, buf, geomBuf, upiBuf] = await Promise.all([
     fetch(`${base}data/stats.json`),
+    fetch(`${base}data/admin.json`),
     get(0, 'buildings.bin'),
     get(1, 'geometry.bin'),
     get(2, 'upis.txt'),
@@ -209,12 +333,24 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   if (!statsRes.ok || !buf) {
     throw new Error('Dataset not found. Run: python tools/prepare_data.py');
   }
+  if (!adminRes.ok) {
+    throw new Error('admin.json not found. Run: python tools/prepare_admin.py');
+  }
 
   const stats: RawStats = await statsRes.json();
+  const adminIndex = buildAdminIndex(await adminRes.json());
   const upiText = upiBuf ? new TextDecoder().decode(upiBuf) : '';
 
   const magic = new TextDecoder().decode(new Uint8Array(buf, 0, 5));
-  if (magic !== 'SPAB1') throw new Error('Unexpected dataset format');
+  /* SPAB2 added the administrative unit index and dropped the sector byte it
+   * replaces. A cached SPAB1 file against this build would decode into
+   * nonsense, so the mismatch is fatal rather than best-effort. */
+  if (magic !== 'SPAB2') {
+    throw new Error(
+      `Unexpected dataset format ${magic} — expected SPAB2. Re-run tools/prepare_data.py, ` +
+        'or hard-reload if an older dataset is cached.',
+    );
+  }
   const n = new DataView(buf).getUint32(5, true);
 
   let o = 9;
@@ -234,8 +370,8 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   o += n * 2;
   const height = new Uint16Array(buf.slice(o, o + n * 2));
   o += n * 2;
-  const sector = new Uint8Array(buf, o, n);
-  o += n;
+  const admin = new Uint16Array(buf.slice(o, o + n * 2));
+  o += n * 2;
   const zone = new Uint8Array(buf, o, n);
 
   // Footprint outlines.
@@ -268,7 +404,7 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
     score,
     area,
     height,
-    sector,
+    admin,
     zone,
     ringStart,
     dx,
@@ -278,7 +414,7 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
      * here is invisible on screen but makes every findByUpi lookup miss. */
     upis: upiText ? upiText.split(/\r?\n/) : [],
     stats,
-    sectorNames: stats.buildings.sectorNames || [],
+    adminIndex,
     zoneNames: stats.buildings.zoneNames || [],
   };
   return cache;
@@ -292,6 +428,30 @@ export interface Selection {
   byUse: Record<string, number>;
   byYear: Record<string, number>;
   byZone: Record<string, number>;
+}
+
+/**
+ * Which administrative units the current area selection admits.
+ *
+ * Returned as a mask over the unit table rather than a level-specific test, so
+ * the hot loops stay one array lookup deep whichever level is chosen. Null when
+ * no area is selected, which lets the caller skip the check entirely.
+ */
+export function unitMask(d: Dataset, f: Filters): Uint8Array | null {
+  if (f.district === 'ALL' && f.sector === 'ALL' && f.cell === 'ALL' && f.village === 'ALL') {
+    return null;
+  }
+  const units = d.adminIndex.table.units;
+  const m = new Uint8Array(units.length);
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (f.district !== 'ALL' && u.d !== f.district) continue;
+    if (f.sector !== 'ALL' && u.s !== f.sector) continue;
+    if (f.cell !== 'ALL' && u.c !== f.cell) continue;
+    if (f.village !== 'ALL' && u.v !== f.village) continue;
+    m[i] = 1;
+  }
+  return m;
 }
 
 function useMask(d: Dataset, filters: Filters): Uint8Array {
@@ -320,7 +480,7 @@ function yearMask(d: Dataset, filters: Filters): Uint8Array {
 export function summarise(d: Dataset, filters: Filters): Selection {
   const uAllowed = useMask(d, filters);
   const yAllowed = yearMask(d, filters);
-  const sectorIdx = filters.sector === 'ALL' ? -1 : d.sectorNames.indexOf(filters.sector);
+  const uMask = unitMask(d, filters);
   const minScore = Math.round(filters.minScore * 254);
 
   const byUse: Record<string, number> = {};
@@ -331,7 +491,7 @@ export function summarise(d: Dataset, filters: Filters): Selection {
 
   let matches = 0;
   for (let i = 0; i < d.n; i++) {
-    if (sectorIdx >= 0 && d.sector[i] !== sectorIdx) continue;
+    if (uMask && uMask[d.admin[i]] !== 1) continue;
     if (minScore > 0 && d.score[i] !== 255 && d.score[i] < minScore) continue;
 
     const u = d.use[i];
@@ -378,6 +538,13 @@ function ringOf(d: Dataset, i: number): [number, number][] | null {
   return ring;
 }
 
+/** The administrative path of one structure, down to the village. */
+export function adminOf(d: Dataset, i: number) {
+  const u = d.adminIndex.table.units[d.admin[i]];
+  if (!u) return { district: undefined, sector: undefined, cell: undefined, village: undefined };
+  return { district: u.d, sector: u.s, cell: u.c, village: u.v };
+}
+
 function toFeature(d: Dataset, i: number): BFeature {
   const ring = ringOf(d, i);
   return {
@@ -391,7 +558,7 @@ function toFeature(d: Dataset, i: number): BFeature {
       lon: d.lon[i],
       lat: d.lat[i],
       UPI: d.upis[i] || undefined,
-      sector: d.sectorNames[d.sector[i]],
+      ...adminOf(d, i),
       lu_cod_pred: d.use[i] < 255 ? ORDER[d.use[i]] : undefined,
       acquisition_date: d.year[i] < 255 ? YEAR_ORDER[d.year[i]] : undefined,
       score: d.score[i] === 255 ? null : d.score[i] / 254,
@@ -412,7 +579,7 @@ export function queryViewport(
 ): { features: BFeature[]; capped: boolean } {
   const uAllowed = useMask(d, filters);
   const yAllowed = yearMask(d, filters);
-  const sectorIdx = filters.sector === 'ALL' ? -1 : d.sectorNames.indexOf(filters.sector);
+  const uMask = unitMask(d, filters);
   const minScore = Math.round(filters.minScore * 254);
 
   const out: BFeature[] = [];
@@ -421,7 +588,7 @@ export function queryViewport(
     if (x < b.w || x > b.e) continue;
     const y = d.lat[i];
     if (y < b.s || y > b.n) continue;
-    if (sectorIdx >= 0 && d.sector[i] !== sectorIdx) continue;
+    if (uMask && uMask[d.admin[i]] !== 1) continue;
     if (minScore > 0 && d.score[i] !== 255 && d.score[i] < minScore) continue;
     const u = d.use[i];
     if (u === 255 || uAllowed[u] !== 1) continue;

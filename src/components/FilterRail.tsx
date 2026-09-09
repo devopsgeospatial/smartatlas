@@ -1,14 +1,23 @@
+import { useMemo } from 'react';
 import { COLORS, LABELS, ORDER, YEAR_ORDER } from '../constants';
-import { DEFAULT_FILTERS, activeFilterCount, toggle } from '../lib/filters';
-import { SECTOR_LIST } from '../sectors';
-import type { Selection } from '../services/dataset';
-import type { Filters, Sector } from '../types';
+import {
+  AREA_LEVELS,
+  DEFAULT_FILTERS,
+  activeFilterCount,
+  setArea,
+  toggle,
+  type AreaKey,
+} from '../lib/filters';
+import type { AdminIndex, Selection } from '../services/dataset';
+import type { BBox, Filters } from '../types';
 
 interface Props {
   filters: Filters;
   selection: Selection | null;
+  admin: AdminIndex | null;
   onChange: (f: Filters) => void;
-  onZoomToSector: (s: Sector | null) => void;
+  /** Fly to the extent of whatever area is now selected; null returns to the city. */
+  onZoomToArea: (bb: BBox | null) => void;
 }
 
 const n = (v: number | null | undefined) => (v == null ? '' : v.toLocaleString());
@@ -20,12 +29,81 @@ const n = (v: number | null | undefined) => (v == null ? '' : v.toLocaleString()
  * Order matters: what is new comes before what it is used for. Building use is
  * essential, but it is not the question anyone opens this product to answer.
  */
-export default function FilterRail({ filters, selection, onChange, onZoomToSector }: Props) {
+/** The label and the placeholder each level shows before its parent is chosen. */
+const AREA_UI: Record<AreaKey, { label: string; all: string; waiting: string }> = {
+  district: { label: 'District', all: 'All Kigali', waiting: 'All Kigali' },
+  sector: { label: 'Sector', all: 'All sectors', waiting: 'Choose a district first' },
+  cell: { label: 'Cell', all: 'All cells', waiting: 'Choose a sector first' },
+  village: { label: 'Village', all: 'All villages', waiting: 'Choose a cell first' },
+};
+
+export default function FilterRail({
+  filters,
+  selection,
+  admin,
+  onChange,
+  onZoomToArea,
+}: Props) {
   const active = activeFilterCount(filters);
 
-  function pickSector(value: string) {
-    onChange({ ...filters, sector: value });
-    onZoomToSector(value === 'ALL' ? null : SECTOR_LIST.find((s) => s.s === value) ?? null);
+  /* Each level lists only what sits inside the level above, which is what makes
+   * a name safe to compare on: "Kabeza" is several villages city-wide but one
+   * village inside a given cell. */
+  const options = useMemo(() => {
+    const t = admin?.table;
+    if (!t) return { district: [], sector: [], cell: [], village: [] };
+    return {
+      district: t.districts.map((r) => r.d),
+      sector:
+        filters.district === 'ALL'
+          ? []
+          : t.sectors.filter((r) => r.d === filters.district).map((r) => r.s),
+      cell:
+        filters.sector === 'ALL'
+          ? []
+          : t.cells
+              .filter((r) => r.d === filters.district && r.s === filters.sector)
+              .map((r) => r.c),
+      village:
+        filters.cell === 'ALL'
+          ? []
+          : t.units
+              .filter(
+                (u) =>
+                  u.d === filters.district && u.s === filters.sector && u.c === filters.cell,
+              )
+              .map((u) => u.v)
+              .sort((x, y) => x.localeCompare(y)),
+    } as Record<AreaKey, string[]>;
+  }, [admin, filters.district, filters.sector, filters.cell]);
+
+  /** The extent of the deepest level now chosen. */
+  function extentFor(f: Filters): BBox | null {
+    const t = admin?.table;
+    if (!t) return null;
+    if (f.village !== 'ALL') {
+      return (
+        t.units.find(
+          (u) => u.d === f.district && u.s === f.sector && u.c === f.cell && u.v === f.village,
+        )?.bb ?? null
+      );
+    }
+    if (f.cell !== 'ALL') {
+      return (
+        t.cells.find((r) => r.d === f.district && r.s === f.sector && r.c === f.cell)?.bb ?? null
+      );
+    }
+    if (f.sector !== 'ALL') {
+      return t.sectors.find((r) => r.d === f.district && r.s === f.sector)?.bb ?? null;
+    }
+    if (f.district !== 'ALL') return t.districts.find((r) => r.d === f.district)?.bb ?? null;
+    return null;
+  }
+
+  function pickArea(key: AreaKey, value: string) {
+    const next = setArea(filters, key, value);
+    onChange(next);
+    onZoomToArea(extentFor(next));
   }
 
   return (
@@ -38,25 +116,38 @@ export default function FilterRail({ filters, selection, onChange, onZoomToSecto
             disabled={active === 0}
             onClick={() => {
               onChange({ ...DEFAULT_FILTERS });
-              onZoomToSector(null);
+              onZoomToArea(null);
             }}
           >
             {active === 0 ? '' : `Clear (${active})`}
           </button>
         </div>
-        <select
-          className="select"
-          value={filters.sector}
-          aria-label="Sector"
-          onChange={(e) => pickSector(e.target.value)}
-        >
-          <option value="ALL">All Kigali</option>
-          {SECTOR_LIST.map((s) => (
-            <option key={s.s} value={s.s}>
-              {s.s} · {s.d}
-            </option>
-          ))}
-        </select>
+        <div className="arealevels">
+          {AREA_LEVELS.map((key, i) => {
+            const parentChosen = i === 0 || filters[AREA_LEVELS[i - 1]] !== 'ALL';
+            const list = options[key];
+            const ui = AREA_UI[key];
+            return (
+              <label className="arealevel" key={key}>
+                <span className="micro arealevel-label">{ui.label}</span>
+                <select
+                  className="select"
+                  value={filters[key]}
+                  aria-label={ui.label}
+                  disabled={!parentChosen || list.length === 0}
+                  onChange={(e) => pickArea(key, e.target.value)}
+                >
+                  <option value="ALL">{parentChosen ? ui.all : ui.waiting}</option>
+                  {list.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       <div className="rail-block">

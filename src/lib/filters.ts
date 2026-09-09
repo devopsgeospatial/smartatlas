@@ -12,15 +12,44 @@ import type { Filters } from '../types';
 export const DEFAULT_FILTERS: Filters = {
   uses: [...ORDER],
   years: [...YEAR_ORDER],
+  district: 'ALL',
   sector: 'ALL',
+  cell: 'ALL',
+  village: 'ALL',
   minScore: 0,
 };
+
+/** The four area levels, outermost first. */
+export const AREA_LEVELS = ['district', 'sector', 'cell', 'village'] as const;
+export type AreaKey = (typeof AREA_LEVELS)[number];
+
+/** The deepest level actually chosen. */
+export function areaLevel(f: Filters): 'city' | AreaKey {
+  let out: 'city' | AreaKey = 'city';
+  for (const k of AREA_LEVELS) if (f[k] !== 'ALL') out = k;
+  return out;
+}
+
+/** Setting a level clears everything below it — a cell outlives no sector. */
+export function setArea(f: Filters, key: AreaKey, value: string): Filters {
+  const next: Filters = { ...f, [key]: value };
+  let clearing = false;
+  for (const k of AREA_LEVELS) {
+    if (clearing) next[k] = 'ALL';
+    if (k === key) clearing = true;
+  }
+  return next;
+}
+
+export function areaIsFiltered(f: Filters): boolean {
+  return AREA_LEVELS.some((k) => f[k] !== 'ALL');
+}
 
 export function isFiltered(f: Filters): boolean {
   return (
     f.uses.length !== ORDER.length ||
     f.years.length !== YEAR_ORDER.length ||
-    f.sector !== 'ALL' ||
+    areaIsFiltered(f) ||
     f.minScore > 0
   );
 }
@@ -30,7 +59,7 @@ export function activeFilterCount(f: Filters): number {
   let n = 0;
   if (f.uses.length !== ORDER.length) n++;
   if (f.years.length !== YEAR_ORDER.length) n++;
-  if (f.sector !== 'ALL') n++;
+  if (areaIsFiltered(f)) n++;
   if (f.minScore > 0) n++;
   return n;
 }

@@ -4,6 +4,8 @@ dist
 # Source exports — hundreds of MB, kept out of the repo.
 # Regenerate public/data with: npm run data
 Kigali_Buildings.geojson
+Kigali_cells.geojson
+Kigali_village.geojson
 tax.dbf
 tax.dbf.xml
 tax.cpg
@@ -11,3 +13,8 @@ tax.prj
 tax.shp
 tax.shx
 __pycache__
+
+# Analysis outputs — regenerate with tools/rental_flags.py
+out/
+Parcels.geojson
+_parcel_upis.txt
