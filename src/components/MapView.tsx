@@ -242,7 +242,7 @@ export default function MapView(props: Props) {
        *
        * The cartography follows one rule: a level appears when it is the finest
        * thing you could still read, and fades once the level below has taken
-       * over. Districts carry the whole city; villages only earn their ink once
+       * over. Sectors carry the whole city; villages only earn their ink once
        * a few of them fill the screen. Weight decreases with level so the
        * hierarchy survives having three of them on screen at once, and every
        * label is haloed because these sit over satellite imagery.
@@ -252,7 +252,9 @@ export default function MapView(props: Props) {
       map.addSource('bounds', { type: 'geojson', data: EMPTY as any });
       map.addSource('cells', { type: 'geojson', data: EMPTY as any });
       map.addSource('villages', { type: 'geojson', data: EMPTY as any });
+      map.addSource('sector-points', { type: 'geojson', data: EMPTY as any });
       fillSource('bounds', `${base}boundaries.geojson`);
+      fillSource('sector-points', `${base}data/sector-labels.geojson`);
       fillSource('cells', `${base}data/cells.geojson`);
 
       /* Cells take the heavier face, villages the lighter one: weight carries
@@ -288,21 +290,60 @@ export default function MapView(props: Props) {
           'line-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 12.5, 0.55],
         },
       });
+      /* Sectors are what the whole city is read by, so at city zoom they carry
+       * the map: a light solid line on a dark casing, which holds against both
+       * bright roofs and dark vegetation. A faint grey dash disappeared into the
+       * imagery entirely. They stay the heaviest line when zoomed in, but ease
+       * back so cells and villages can be read beside them. */
+      map.addLayer({
+        id: 'sector-casing',
+        type: 'line',
+        source: 'bounds',
+        paint: {
+          'line-color': 'rgba(6,14,13,.6)',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2.4, 12, 3.6, 16, 4.6],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.7, 14, 0.5, 17, 0.35],
+        },
+      });
       map.addLayer({
         id: 'bounds-line',
         type: 'line',
         source: 'bounds',
         paint: {
-          'line-color': token('--tx-2', '#a5b6b4'),
-          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 2.2],
-          'line-opacity': 0.55,
-          'line-dasharray': [3, 2],
+          'line-color': token('--tx-1', '#e9f0ef'),
+          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 12, 1.6, 16, 2.4],
+          'line-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.9, 13, 0.85, 16, 0.6],
         },
       });
 
       /* Labels sit above every boundary line and below nothing else. Ranges
        * overlap by half a zoom level so a name never blinks out before its
        * replacement has appeared. */
+      /* Sector names are the city-scale labels. They hand over to cell names
+       * between z12.6 and z13.4, the same half-level overlap every other pair
+       * uses, and read larger and wider-set than cells so the two never look
+       * like the same level. */
+      map.addLayer({
+        id: 'sector-label',
+        type: 'symbol',
+        source: 'sector-points',
+        maxzoom: 13.6,
+        layout: {
+          'text-field': ['get', 's'],
+          'text-font': FONT_CELL,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 9, 10, 11, 12, 13, 14],
+          'text-letter-spacing': 0.12,
+          'text-transform': 'uppercase',
+          'text-padding': 4,
+        },
+        paint: {
+          'text-color': token('--tx-1', '#e9f0ef'),
+          'text-halo-color': token('--bg-0', '#070c0d'),
+          'text-halo-width': 2,
+          'text-halo-blur': 0.4,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 12.6, 1, 13.4, 0],
+        },
+      });
       map.addLayer({
         id: 'cell-label',
         type: 'symbol',
@@ -421,26 +462,6 @@ export default function MapView(props: Props) {
         },
       });
 
-      map.addLayer({
-        id: 'bounds-label',
-        type: 'symbol',
-        source: 'bounds',
-        layout: {
-          'symbol-placement': 'point',
-          'text-field': ['get', 's'],
-          'text-font': ['Open Sans Bold'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 10, 10, 13, 13, 16, 17],
-          'text-transform': 'uppercase',
-          'text-letter-spacing': 0.08,
-          'text-padding': 6,
-        },
-        paint: {
-          'text-color': token('--tx-1', '#e9f0ef'),
-          'text-halo-color': 'rgba(4,10,10,.92)',
-          'text-halo-width': 1.8,
-          'text-opacity': 0.9,
-        },
-      });
 
       for (const layer of ['structures']) {
         map.on('click', layer, (e) => {
@@ -475,7 +496,7 @@ export default function MapView(props: Props) {
        * names belong above everything, or a dense sector buries them under its
        * own footprints. The layers are created in one block for legibility and
        * the two label layers are lifted here. */
-      for (const id of ['cell-label', 'village-label']) {
+      for (const id of ['sector-label', 'cell-label', 'village-label']) {
         if (map.getLayer(id)) map.moveLayer(id);
       }
 

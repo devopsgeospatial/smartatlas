@@ -20,6 +20,7 @@ OUTPUTS (public/data/)
                      has loaded.
     cells.geojson    161 cell boundaries, slimmed and rounded.
     villages.geojson 1,163 village boundaries, slimmed and rounded.
+    sector-labels.geojson  one point per sector, to hang its name on.
 
 admin.json carries a label point per village. MapLibre places polygon labels
 itself and does it well, so the boundary layers do not repeat it — the point is
@@ -202,6 +203,21 @@ def main() -> int:
     write_json("admin.json", admin)
     write_json("cells.geojson", {"type": "FeatureCollection", "features": cell_feats})
     write_json("villages.geojson", {"type": "FeatureCollection", "features": village_feats})
+
+    # Sector names need one anchor each. A label on a polygon is placed once per
+    # map tile the polygon crosses, so a sector spanning a dozen tiles at city
+    # zoom would carry a dozen copies of its name. One point per sector, inside
+    # its own polygon (checked for all 35), is placed exactly once.
+    sector_pts = []
+    for feat in iter_features(os.path.join(ROOT, "public", "boundaries.geojson")):
+        lp = label_point(feat["geometry"])
+        if lp:
+            sector_pts.append({
+                "type": "Feature",
+                "properties": {"s": clean(feat["properties"].get("s"))},
+                "geometry": {"type": "Point", "coordinates": lp},
+            })
+    write_json("sector-labels.geojson", {"type": "FeatureCollection", "features": sector_pts})
     print("done")
     return 0
 
