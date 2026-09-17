@@ -29,6 +29,7 @@ TAX_DBF = os.path.join(ROOT, "tax.dbf")
 OUT = os.path.join(ROOT, "public", "data")
 
 ADMIN = os.path.join(ROOT, "public", "data", "admin.json")
+PARCELS = os.path.join(ROOT, "Parcels.geojson")
 
 USE_ORDER = ["CM", "CMI", "RAP", "ROR", "RI", "PI", "I"]
 USE_INDEX = {c: i for i, c in enumerate(USE_ORDER)}
@@ -70,6 +71,41 @@ def load_admin_units():
     if len(index) != len(units):
         raise SystemExit("admin.json holds duplicate village paths")
     return units, index
+
+
+def load_upi_units(admin_index):
+    """
+    upi -> administrative unit index, taken from the parcel layer.
+
+    Some revisions of the buildings layer ship Cell and Village and some do not;
+    the 2026-09-17 export dropped both. The parcel layer always carries the full
+    path, and a building already carries the parcel identifier, so the hierarchy
+    is recovered by the join rather than lost with the columns.
+    """
+    if not os.path.exists(PARCELS):
+        print("  WARNING: Parcels.geojson missing — cannot recover Cell/Village by upi",
+              flush=True)
+        return {}
+    out = {}
+    n = 0
+    for feat in iter_features(PARCELS):
+        p = feat.get("properties") or {}
+        upi = (p.get("upi") or "").strip()
+        if not upi:
+            continue
+        unit = admin_index.get((
+            (p.get("district") or "").strip(),
+            (p.get("sector") or "").strip(),
+            (p.get("cell") or "").strip(),
+            (p.get("village") or "").strip(),
+        ))
+        if unit is not None:
+            out[upi] = unit
+        n += 1
+        if n % 200000 == 0:
+            print(f"  ...{n:,} parcels", flush=True)
+    print(f"  {len(out):,} of {n:,} parcels resolved to a village", flush=True)
+    return out
 
 
 def zone_code(raw):
@@ -206,7 +242,7 @@ def read_dbf(path):
 
 
 # ---------------------------------------------------------------- buildings
-def build_buildings(admin_index):
+def build_buildings(admin_index, upi_units):
     lons, lats = [], []
     uses, years, floors, scores, areas, heights = [], [], [], [], [], []
     admin_idx, zone_idx = [], []
@@ -287,6 +323,9 @@ def build_buildings(admin_index):
             (p.get("Village") or "").strip(),
         )
         unit = admin_index.get(path)
+        if unit is None:
+            # No Cell/Village on this record: recover the path from its parcel.
+            unit = upi_units.get((p.get("upi") or "").strip())
         if unit is None:
             unmatched_admin[path] += 1
             unit = 65535
@@ -461,8 +500,10 @@ def main():
     # pass folds its own onto them.
     units, admin_index = load_admin_units()
     print(f"admin.json: {len(units):,} villages")
+    print("reading Parcels.geojson for the upi -> village join ...")
+    upi_units = load_upi_units(admin_index)
     print("reading Kigali_Buildings.geojson ...")
-    buildings = build_buildings(admin_index)
+    buildings = build_buildings(admin_index, upi_units)
     print("reading tax.dbf ...")
     tax = build_tax(buildings["sectorNames"])
 
