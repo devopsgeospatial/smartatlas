@@ -245,7 +245,7 @@ def read_dbf(path):
 def build_buildings(admin_index, upi_units):
     lons, lats = [], []
     uses, years, floors, scores, areas, heights = [], [], [], [], [], []
-    admin_idx, zone_idx = [], []
+    admin_idx, sector_idx, zone_idx = [], [], []
     # Footprint outlines: Int16 deltas from the centroid at 1e-6 degrees
     # (about 0.11 m), which is far finer than the footprints themselves.
     gx = array.array("h")
@@ -330,6 +330,11 @@ def build_buildings(admin_index, upi_units):
             unmatched_admin[path] += 1
             unit = 65535
         admin_idx.append(unit)
+        # The sector column survives every export, while Cell and Village do not.
+        # Keeping it means district and sector filters cover every structure and
+        # agree with the district totals on the panel; only cell and village
+        # depend on the village index and its gaps.
+        sector_idx.append(min(254, sector_key[sec]))
         if zone not in zone_key:
             zone_key[zone] = len(zone_names)
             zone_names.append(zone)
@@ -368,7 +373,7 @@ def build_buildings(admin_index, upi_units):
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "buildings.bin"), "wb") as f:
-        f.write(b"SPAB2")
+        f.write(b"SPAB3")
         f.write(struct.pack("<I", n))
         f.write(struct.pack(f"<{n}f", *lons))
         f.write(struct.pack(f"<{n}f", *lats))
@@ -379,6 +384,7 @@ def build_buildings(admin_index, upi_units):
         f.write(struct.pack(f"<{n}H", *areas))
         f.write(struct.pack(f"<{n}H", *heights))
         f.write(struct.pack(f"<{n}H", *admin_idx))
+        f.write(bytes(sector_idx))
         f.write(bytes(zone_idx))
 
     goff.append(len(gx))  # terminating offset

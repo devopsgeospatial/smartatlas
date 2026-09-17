@@ -231,6 +231,8 @@ export interface Dataset {
   height: Uint16Array;
   /** Index into admin.units. 65535 when the path matched no village. */
   admin: Uint16Array;
+  /** Index into stats.buildings.sectorNames. Present on every structure. */
+  sector: Uint8Array;
   zone: Uint8Array;
   /** Footprint outlines: vertex range per structure, deltas from the centroid. */
   ringStart: Uint32Array;
@@ -239,6 +241,7 @@ export interface Dataset {
   upis: string[];
   stats: RawStats;
   adminIndex: AdminIndex;
+  sectorNames: string[];
   zoneNames: string[];
 }
 
@@ -345,9 +348,9 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   /* SPAB2 added the administrative unit index and dropped the sector byte it
    * replaces. A cached SPAB1 file against this build would decode into
    * nonsense, so the mismatch is fatal rather than best-effort. */
-  if (magic !== 'SPAB2') {
+  if (magic !== 'SPAB3') {
     throw new Error(
-      `Unexpected dataset format ${magic} — expected SPAB2. Re-run tools/prepare_data.py, ` +
+      `Unexpected dataset format ${magic} — expected SPAB3. Re-run tools/prepare_data.py, ` +
         'or hard-reload if an older dataset is cached.',
     );
   }
@@ -372,6 +375,8 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   o += n * 2;
   const admin = new Uint16Array(buf.slice(o, o + n * 2));
   o += n * 2;
+  const sector = new Uint8Array(buf, o, n);
+  o += n;
   const zone = new Uint8Array(buf, o, n);
 
   // Footprint outlines.
@@ -415,6 +420,8 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
     upis: upiText ? upiText.split(/\r?\n/) : [],
     stats,
     adminIndex,
+    sector,
+    sectorNames: stats.buildings.sectorNames || [],
     zoneNames: stats.buildings.zoneNames || [],
   };
   return cache;
@@ -437,6 +444,36 @@ export interface Selection {
  * the hot loops stay one array lookup deep whichever level is chosen. Null when
  * no area is selected, which lets the caller skip the check entirely.
  */
+/**
+ * The area test for the current filters, or null when no area is chosen.
+ *
+ * District and sector come from the sector index, which every structure
+ * carries, so those two levels cover the whole city and agree with the district
+ * totals on the panel. Cell and village come from the village index, which some
+ * exports leave incomplete — a structure the upi join could not place is
+ * excluded once the selection goes below sector.
+ */
+export function areaTest(d: Dataset, f: Filters): ((i: number) => boolean) | null {
+  if (f.cell !== 'ALL' || f.village !== 'ALL') {
+    const m = unitMask(d, f)!;
+    return (i) => m[d.admin[i]] === 1;
+  }
+  if (f.sector !== 'ALL') {
+    const si = d.sectorNames.indexOf(f.sector);
+    return (i) => d.sector[i] === si;
+  }
+  if (f.district !== 'ALL') {
+    const allowed = new Uint8Array(256);
+    for (const r of d.adminIndex.table.sectors) {
+      if (r.d !== f.district) continue;
+      const si = d.sectorNames.indexOf(r.s);
+      if (si >= 0) allowed[si] = 1;
+    }
+    return (i) => allowed[d.sector[i]] === 1;
+  }
+  return null;
+}
+
 export function unitMask(d: Dataset, f: Filters): Uint8Array | null {
   if (f.district === 'ALL' && f.sector === 'ALL' && f.cell === 'ALL' && f.village === 'ALL') {
     return null;
@@ -480,7 +517,7 @@ function yearMask(d: Dataset, filters: Filters): Uint8Array {
 export function summarise(d: Dataset, filters: Filters): Selection {
   const uAllowed = useMask(d, filters);
   const yAllowed = yearMask(d, filters);
-  const uMask = unitMask(d, filters);
+  const inArea = areaTest(d, filters);
   const minScore = Math.round(filters.minScore * 254);
 
   const byUse: Record<string, number> = {};
@@ -491,7 +528,7 @@ export function summarise(d: Dataset, filters: Filters): Selection {
 
   let matches = 0;
   for (let i = 0; i < d.n; i++) {
-    if (uMask && uMask[d.admin[i]] !== 1) continue;
+    if (inArea && !inArea(i)) continue;
     if (minScore > 0 && d.score[i] !== 255 && d.score[i] < minScore) continue;
 
     const u = d.use[i];
@@ -579,7 +616,7 @@ export function queryViewport(
 ): { features: BFeature[]; capped: boolean } {
   const uAllowed = useMask(d, filters);
   const yAllowed = yearMask(d, filters);
-  const uMask = unitMask(d, filters);
+  const inArea = areaTest(d, filters);
   const minScore = Math.round(filters.minScore * 254);
 
   const out: BFeature[] = [];
@@ -588,7 +625,7 @@ export function queryViewport(
     if (x < b.w || x > b.e) continue;
     const y = d.lat[i];
     if (y < b.s || y > b.n) continue;
-    if (uMask && uMask[d.admin[i]] !== 1) continue;
+    if (inArea && !inArea(i)) continue;
     if (minScore > 0 && d.score[i] !== 255 && d.score[i] < minScore) continue;
     const u = d.use[i];
     if (u === 255 || uAllowed[u] !== 1) continue;
