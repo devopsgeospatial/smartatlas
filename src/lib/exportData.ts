@@ -164,7 +164,7 @@ export function buildReport(input: ReportInput): string {
 
   const vacantSection =
     t.byDistrict && t.bySector
-      ? `<h2>Vacant taxable parcels by district</h2>
+      ? `<h2>Undeveloped taxable parcels by district</h2>
 <table><thead><tr><th>District</th><th class="n">Parcels</th></tr></thead><tbody>${Object.entries(
           t.byDistrict,
         )
@@ -172,7 +172,7 @@ export function buildReport(input: ReportInput): string {
           .map(([d, v]) => `<tr><td>${d}</td><td class="n">${n(v)}</td></tr>`)
           .join('')}</tbody></table>
 
-<h2>Vacant taxable parcels by sector</h2>
+<h2>Undeveloped taxable parcels by sector</h2>
 <table><thead><tr><th>Sector</th><th>District</th><th class="n">Parcels</th><th class="n">Hectares</th></tr></thead>
 <tbody>${t.bySector
           .slice(0, 15)
@@ -181,7 +181,7 @@ export function buildReport(input: ReportInput): string {
               `<tr><td>${r.sector}</td><td>${r.district}</td><td class="n">${n(r.vacant)}</td><td class="n">${ha(r.sqm)}</td></tr>`,
           )
           .join('')}</tbody></table>`
-      : `<h2>Vacant taxable parcels by zone — ${t.scope}</h2>
+      : `<h2>Undeveloped taxable parcels by zone — ${t.scope}</h2>
 <table><thead><tr><th>Zone</th><th>Description</th><th class="n">Parcels</th></tr></thead>
 <tbody>${Object.entries(t.byZone)
           .sort((x, y) => y[1] - x[1])
@@ -236,8 +236,8 @@ ${
   <div class="kpi"><div class="l">New since 2023</div><div class="v">${n(
     selection?.byYear['2025'] ?? b.byYear['2025'],
   )}</div></div>
-  <div class="kpi"><div class="l">Vacant taxable parcels</div><div class="v">${n(t.vacant)}</div></div>
-  <div class="kpi"><div class="l">Vacant land (ha)</div><div class="v">${ha(t.sqm)}</div></div>
+  <div class="kpi"><div class="l">Undeveloped taxable parcels</div><div class="v">${n(t.vacant)}</div></div>
+  <div class="kpi"><div class="l">Undeveloped land (ha)</div><div class="v">${ha(t.sqm)}</div></div>
 </div>
 
 ${vacantSection}

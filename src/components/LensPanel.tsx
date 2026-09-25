@@ -121,8 +121,8 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
         <Scope filters={filters} />
 
         <div className="stat2grid">
-          <Stat label="Vacant taxable parcels" value={n(t.vacant)} />
-          <Stat label="Vacant land" value={n(ha(t.sqm))} unit="ha" />
+          <Stat label="Undeveloped taxable parcels" value={n(t.vacant)} />
+          <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
         </div>
 
         <div className="stat2grid">
@@ -147,7 +147,7 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
 
         {t.byDistrict && (
           <Bars
-            title="Vacant parcels by district"
+            title="Undeveloped parcels by district"
             data={Object.entries(t.byDistrict).map(([d, v]) => ({
               key: d,
               label: d,
@@ -157,7 +157,7 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
         )}
 
         <Bars
-          title="Vacant parcels by zone"
+          title="Undeveloped parcels by zone"
           data={Object.entries(t.byZone).map(([z, v]) => ({
             key: z,
             label: z,
@@ -243,7 +243,7 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
       <div className="stat2grid">
         <Stat label="Structures" value={n(selection?.matches ?? b.total)} />
         <Stat label="New since 2023" value={n(newCount)} />
-        <Stat label="Vacant taxable parcels" value={n(taxFor(tax, filters).vacant)} />
+        <Stat label="Undeveloped taxable parcels" value={n(taxFor(tax, filters).vacant)} />
         <Stat
           label="Field verified"
           value={n(b.groundConfirmed)}

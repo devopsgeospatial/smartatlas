@@ -31,7 +31,10 @@ export interface TaxTable {
 }
 
 /**
- * The vacant-land figures for whatever area is selected.
+ * The undeveloped-land figures for whatever area is selected.
+ *
+ * The `vacant*` field names mirror tax.dbf, which is where these come from.
+ * The interface calls them "undeveloped" — the data is the same.
  *
  * The parcel table is aggregated at build time rather than held row by row, so
  * a sector is narrowed by picking its precomputed row instead of scanning. The
