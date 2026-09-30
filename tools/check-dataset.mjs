@@ -39,8 +39,9 @@ const sector = new Uint8Array(buf, o, n); o += n;
 const zone = new Uint8Array(buf, o, n); o += n;
 const rev = new Uint8Array(buf, o, n); o += n;
 const declared = new Uint8Array(buf, o, n); o += n;
+const verified = new Uint8Array(buf, o, n); o += n;
 
-check('magic is SPAB5', magic === 'SPAB5', magic);
+check('magic is SPAB6', magic === 'SPAB6', magic);
 check('record count matches stats.json', n === stats.buildings.total, n.toLocaleString());
 check('all attribute bytes consumed', o === buf.byteLength, `${o} of ${buf.byteLength}`);
 
@@ -126,6 +127,25 @@ check(
   for (let i = 0; i < n; i++) { if (declared[i] >= names.length) bad++; if (declared[i] > maxIdx) maxIdx = declared[i]; }
   check('declared-use indices resolve', bad === 0 && names.length > 0,
     bad ? `${bad} out of range` : `${names.length} declared values, max index ${maxIdx}`);
+}
+
+// The verification flag must be a clean 0/1 and must agree with the count the
+// panel quotes, or "ground-verified" means nothing.
+{
+  let bad = 0, ones = 0, mmVerified = 0;
+  for (let i = 0; i < n; i++) {
+    const v = verified[i];
+    if (v > 1) bad++;
+    if (v === 1) { ones++; if (rev[i] === 2) mmVerified++; }
+  }
+  check('verified flag is 0 or 1', bad === 0, bad ? `${bad} bad` : `${ones.toLocaleString()} confirmed`);
+  check('verified count matches groundConfirmed', ones === stats.buildings.groundConfirmed,
+    `${ones.toLocaleString()} vs ${stats.buildings.groundConfirmed.toLocaleString()}`);
+  const want = stats.buildings.revenue?.useMismatchVerified;
+  if (want != null) {
+    check('verified use conflicts match stats.json', mmVerified === want,
+      `${mmVerified.toLocaleString()} of ${(stats.buildings.revenue.useMismatch).toLocaleString()}`);
+  }
 }
 
 check('zone indices resolve', badZone === 0, `${zn.length} zones`);

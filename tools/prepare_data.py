@@ -287,6 +287,11 @@ def build_buildings(admin_index, upi_units):
     # strings — and the dossier needs the exact wording, not a class.
     declared_idx = []
     declared_names, declared_key = [], {}
+    # Ground confirmation, one byte. A use conflict an officer has stood in
+    # front of is not the same claim as one a classifier inferred, and the
+    # revenue view lets a reader keep the two apart — so the flag has to
+    # travel with every structure, not just be counted in the totals.
+    verified = []
     # Footprint outlines: Int16 deltas from the centroid at 1e-6 degrees
     # (about 0.11 m), which is far finer than the footprints themselves.
     gx = array.array("h")
@@ -303,6 +308,7 @@ def build_buildings(admin_index, upi_units):
     by_sector = Counter()
     by_status = Counter()
     by_rev = Counter()
+    by_rev_verified = Counter()
     by_rev_year = defaultdict(Counter)
     by_rev_district = defaultdict(Counter)
     by_rev_sector = defaultdict(Counter)
@@ -394,9 +400,14 @@ def build_buildings(admin_index, upi_units):
             declared_names.append(dec)
         declared_idx.append(min(254, declared_key[dec]))
 
+        conf = is_confirmed(p.get("Ground-Confirmed"))
+        verified.append(1 if conf else 0)
+
         rev = revenue_code(p)
         revs.append(rev)
         by_rev[rev] += 1
+        if conf:
+            by_rev_verified[rev] += 1
         by_rev_year[year][rev] += 1
         by_rev_district[(p.get("District") or "").strip()][rev] += 1
         by_rev_sector[sec][rev] += 1
@@ -413,7 +424,7 @@ def build_buildings(admin_index, upi_units):
         by_district[(p.get("District") or "").strip()] += 1
         by_sector[(p.get("Sector") or "").strip()] += 1
         by_status[(p.get("status") or "").strip()] += 1
-        if is_confirmed(p.get("Ground-Confirmed")):
+        if conf:
             ground += 1
 
         n += 1
@@ -434,7 +445,7 @@ def build_buildings(admin_index, upi_units):
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "buildings.bin"), "wb") as f:
-        f.write(b"SPAB5")
+        f.write(b"SPAB6")
         f.write(struct.pack("<I", n))
         f.write(struct.pack(f"<{n}f", *lons))
         f.write(struct.pack(f"<{n}f", *lats))
@@ -451,6 +462,8 @@ def build_buildings(admin_index, upi_units):
         f.write(bytes(revs))
         # SPAB5 adds the declared-use index; the names live in stats.json.
         f.write(bytes(declared_idx))
+        # SPAB6 adds the ground-confirmation flag.
+        f.write(bytes(verified))
 
     goff.append(len(gx))  # terminating offset
     with open(os.path.join(OUT, "geometry.bin"), "wb") as f:
@@ -499,6 +512,8 @@ def build_buildings(admin_index, upi_units):
             # The two figures the revenue view is built to show.
             "newUnregistered": by_rev_year.get("2025", {}).get(REV_ABSENT, 0),
             "useMismatch": by_rev.get(REV_MISMATCH, 0),
+            "byCodeVerified": {str(k): v for k, v in sorted(by_rev_verified.items())},
+            "useMismatchVerified": by_rev_verified.get(REV_MISMATCH, 0),
             "exempted": exempted,
         },
     }

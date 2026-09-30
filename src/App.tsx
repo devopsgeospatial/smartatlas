@@ -48,6 +48,10 @@ function LoadBar({ progress }: { progress: LoadProgress | null }) {
 
 export default function App() {
   const [lens, setLens] = useState<LensId>(initial.lens);
+  /* Revenue view only: restrict use conflicts to structures an officer has
+   * confirmed on the ground. On by default — a conflict someone has stood in
+   * front of is evidence, and one the classifier inferred is a lead. */
+  const [verifiedOnly, setVerifiedOnly] = useState(true);
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [selected, setSelected] = useState<BFeature | null>(null);
   const [dataset, setDataset] = useState<Dataset | null>(null);
@@ -201,6 +205,7 @@ export default function App() {
           dataset={dataset}
           loadFailed={error !== null}
           lens={lens}
+          verifiedOnly={verifiedOnly}
           filters={filters}
           selectedId={selected ? selected.properties.OBJECTID : null}
           flyTo={flyTo}
@@ -231,6 +236,8 @@ export default function App() {
               selection={selection}
               filters={filters}
               progress={progress}
+              verifiedOnly={verifiedOnly}
+              onVerifiedOnly={setVerifiedOnly}
             />
           )}
         </aside>

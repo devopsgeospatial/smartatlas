@@ -13,6 +13,9 @@ interface Props {
   filters: Filters;
   /** Download progress while stats is still null. */
   progress?: LoadProgress | null;
+  /** Revenue view: count use conflicts only where ground-confirmed. */
+  verifiedOnly: boolean;
+  onVerifiedOnly: (v: boolean) => void;
 }
 
 const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString());
@@ -74,7 +77,15 @@ function Scope({ filters }: { filters: Filters }) {
 /** Strip the leading code from "R1A-Low density residential densification zone". */
 const zoneDesc = (label: string) => (label || '').replace(/^[A-Z0-9]+\s*-\s*/, '');
 
-export default function LensPanel({ lens, stats, selection, filters, progress }: Props) {
+export default function LensPanel({
+  lens,
+  stats,
+  selection,
+  filters,
+  progress,
+  verifiedOnly,
+  onVerifiedOnly,
+}: Props) {
   if (!stats) {
     const mb = (bytes: number) => (bytes / 1e6).toFixed(1);
     return (
@@ -131,6 +142,16 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
       color: REV_COLORS[c],
     }));
 
+    /* A conflict an officer has stood in front of is an observation; one the
+     * classifier inferred is a lead. Both counts are already computed, so the
+     * toggle only chooses between them. */
+    const conflicts = verifiedOnly
+      ? (selection?.mismatchVerified ?? b.revenue?.useMismatchVerified)
+      : (selection?.byRev?.[REV.MISMATCH] ?? b.revenue?.useMismatch);
+    const conflictBySector = verifiedOnly
+      ? selection?.sectorMismatchVerified
+      : selection?.sectorMismatch;
+
     const sectorBars = (src: Record<string, number> | undefined, color: string): BarDatum[] =>
       Object.entries(src || {})
         .filter(([, v]) => v > 0)
@@ -151,10 +172,9 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
 
         <Scope filters={filters} />
 
-        {/* The registry findings lead, because they are the ones an assessor
-          * can act on this week. Undeveloped parcels are context and sit
-          * underneath. */}
-        <h4 className="lens-sub">Revenue leakage</h4>
+        {/* Indicators first, both groups together, so the four numbers can be
+          * read in one glance. The charts that explain them follow. */}
+        <h4 className="lens-sub">Potential revenue leakage</h4>
 
         <div className="stat2grid">
           <Stat
@@ -162,9 +182,28 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
             value={n(selection?.newUnregistered ?? b.revenue?.newUnregistered)}
           />
           <Stat
-            label="In tax roll, use conflicts"
-            value={n(selection?.byRev?.[REV.MISMATCH] ?? b.revenue?.useMismatch)}
+            label={verifiedOnly ? 'Use conflicts, ground-verified' : 'Use conflicts'}
+            value={n(conflicts)}
           />
+        </div>
+
+        <button
+          className="toggle"
+          role="switch"
+          aria-checked={verifiedOnly}
+          onClick={() => onVerifiedOnly(!verifiedOnly)}
+        >
+          <span className="box" aria-hidden="true">
+            {verifiedOnly ? '✓' : ''}
+          </span>
+          <span className="optname">Ground-verified conflicts only</span>
+        </button>
+
+        <h4 className="lens-sub">Undeveloped land</h4>
+
+        <div className="stat2grid">
+          <Stat label="Undeveloped taxable parcels" value={n(t.vacant)} />
+          <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
         </div>
 
         <Bars title="Registry status — built since 2023" data={revBars} />
@@ -176,17 +215,14 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
         />
 
         <Bars
-          title="Use conflicts — top sectors"
-          data={sectorBars(selection?.sectorMismatch, REV_COLORS[REV.MISMATCH])}
+          title={
+            verifiedOnly
+              ? 'Verified use conflicts — top sectors'
+              : 'Use conflicts — top sectors'
+          }
+          data={sectorBars(conflictBySector, REV_COLORS[REV.MISMATCH])}
           limit={8}
         />
-
-        <h4 className="lens-sub">Undeveloped land</h4>
-
-        <div className="stat2grid">
-          <Stat label="Undeveloped taxable parcels" value={n(t.vacant)} />
-          <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
-        </div>
 
         {t.coarserThanAsked && (
           <p className="lens-note">

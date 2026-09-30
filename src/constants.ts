@@ -83,8 +83,10 @@ export const REV_COLORS: Record<number, string> = {
   [REV.ABSENT]: '#D8452F',
 };
 
-/** The 2023 stock, drawn as context behind the year the registry can answer for. */
-export const BASELINE_COLOR = '#4A5A63';
+/** Everything not actionable. Black, so the two findings are the only things
+ * on the map carrying colour — over satellite imagery a mid-grey competes with
+ * the roofs underneath it, while black reads as deliberately switched off. */
+export const BASELINE_COLOR = '#0A0D0E';
 
 export const revLabel = (c?: number | null) =>
   (c != null && REV_LABELS[c]) || 'Not checked';

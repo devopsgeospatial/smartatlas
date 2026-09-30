@@ -228,6 +228,8 @@ export interface RawStats {
       bySector: Record<string, Record<string, number>>;
       newUnregistered: number;
       useMismatch: number;
+      useMismatchVerified: number;
+      byCodeVerified: Record<string, number>;
       exempted: number;
     };
   };
@@ -253,6 +255,8 @@ export interface Dataset {
   rev: Uint8Array;
   /** Declared use, indexed into declaredNames. */
   declared: Uint8Array;
+  /** 1 where the structure has been ground-confirmed. */
+  verified: Uint8Array;
   declaredNames: string[];
   /** Footprint outlines: vertex range per structure, deltas from the centroid. */
   ringStart: Uint32Array;
@@ -368,9 +372,9 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   /* SPAB2 added the administrative unit index and dropped the sector byte it
    * replaces. A cached SPAB1 file against this build would decode into
    * nonsense, so the mismatch is fatal rather than best-effort. */
-  if (magic !== 'SPAB5') {
+  if (magic !== 'SPAB6') {
     throw new Error(
-      `Unexpected dataset format ${magic} — expected SPAB5. Re-run tools/prepare_data.py, ` +
+      `Unexpected dataset format ${magic} — expected SPAB6. Re-run tools/prepare_data.py, ` +
         'or hard-reload if an older dataset is cached.',
     );
   }
@@ -408,6 +412,11 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
    * dossier shows the registry's exact wording beside the model's prediction,
    * so the class is not enough — the string is the point. */
   const declared = new Uint8Array(buf, o, n);
+  o += n;
+  /* SPAB6: 1 where an officer has confirmed the structure on the ground. A
+   * use conflict carrying this flag is an observation; one without it is an
+   * inference, and the revenue view lets the reader choose which to trust. */
+  const verified = new Uint8Array(buf, o, n);
 
   // Footprint outlines.
   let ringStart = new Uint32Array(n + 1);
@@ -443,6 +452,7 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
     zone,
     rev,
     declared,
+    verified,
     declaredNames: stats.buildings.declaredNames || [],
     ringStart,
     dx,
@@ -476,6 +486,10 @@ export interface Selection {
   sectorAbsent: Record<string, number>;
   /** Use conflicts by sector, all cohorts. */
   sectorMismatch: Record<string, number>;
+  /** The same, restricted to structures confirmed on the ground. */
+  sectorMismatchVerified: Record<string, number>;
+  /** Use conflicts on ground-confirmed structures — observed, not inferred. */
+  mismatchVerified: number;
   /** Not in the roll AND first seen in 2025 — the defensible leakage figure. */
   newUnregistered: number;
 }
@@ -579,6 +593,11 @@ export function summarise(d: Dataset, filters: Filters): Selection {
   const byRev2025: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
   const sectorAbsent: Record<string, number> = {};
   const sectorMismatch: Record<string, number> = {};
+  /* Both cuts of the use conflict are counted in the same pass. The toggle
+   * then switches between two numbers already in hand rather than forcing a
+   * re-scan of 620,000 records on a click. */
+  const sectorMismatchVerified: Record<string, number> = {};
+  let mismatchVerified = 0;
   let newUnregistered = 0;
   ORDER.forEach((c) => (byUse[c] = 0));
   YEAR_ORDER.forEach((y) => (byYear[y] = 0));
@@ -617,12 +636,17 @@ export function summarise(d: Dataset, filters: Filters): Selection {
       if (r === 2) {
         const s = d.sectorNames[d.sector[i]];
         if (s) sectorMismatch[s] = (sectorMismatch[s] || 0) + 1;
+        if (d.verified[i] === 1) {
+          mismatchVerified++;
+          if (s) sectorMismatchVerified[s] = (sectorMismatchVerified[s] || 0) + 1;
+        }
       }
     }
   }
   return {
     matches, byUse, byYear, byZone, byRev, byRev2025,
-    sectorAbsent, sectorMismatch, newUnregistered,
+    sectorAbsent, sectorMismatch, sectorMismatchVerified,
+    newUnregistered, mismatchVerified,
   };
 }
 
@@ -685,6 +709,7 @@ function toFeature(d: Dataset, i: number): BFeature {
        * it without a second lookup per structure at paint time. */
       rev: d.rev[i],
       declared_use: d.declaredNames[d.declared[i]] || undefined,
+      verified: d.verified[i] === 1,
     },
   };
 }

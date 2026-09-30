@@ -23,6 +23,8 @@ export interface BuildingProps {
   rev?: number;
   /** Use as declared to RRA, verbatim. Empty when the parcel is not on the roll. */
   declared_use?: string;
+  /** An officer has confirmed this structure on the ground. */
+  verified?: boolean;
   /** Footprint centroid, so callers never have to unwrap the geometry. */
   lon?: number;
   lat?: number;

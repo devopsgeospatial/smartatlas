@@ -45,6 +45,8 @@ interface Props {
   dataset: Dataset | null;
   /** Which lens is open. The revenue lens repaints the map on registry status. */
   lens: LensId;
+  /** Revenue lens: colour a use conflict only where it was ground-confirmed. */
+  verifiedOnly: boolean;
   /** The load threw, so "loading" would be a lie. */
   loadFailed?: boolean;
   filters: Filters;
@@ -94,10 +96,13 @@ export default function MapView(props: Props) {
     if (propsRef.current.lens === 'revenue') {
       const isNew = ['==', ['get', 'acquisition_date'], '2025'];
       const rev = ['to-number', ['get', 'rev'], -1];
+      const conflict: any[] = propsRef.current.verifiedOnly
+        ? ['all', ['==', rev, REV.MISMATCH], ['==', ['get', 'verified'], true]]
+        : ['==', rev, REV.MISMATCH];
       return [
         'case',
         ['all', ['==', rev, REV.ABSENT], isNew], REV_COLORS[REV.ABSENT],
-        ['==', rev, REV.MISMATCH], REV_COLORS[REV.MISMATCH],
+        conflict, REV_COLORS[REV.MISMATCH],
         BASELINE_COLOR,
       ];
     }
@@ -567,7 +572,7 @@ export default function MapView(props: Props) {
   useEffect(() => {
     repaint();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.selectedId, props.lens]);
+  }, [props.selectedId, props.lens, props.verifiedOnly]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -632,7 +637,9 @@ export default function MapView(props: Props) {
           </div>
           <div className="revlegend-row">
             <span className="revlegend-dot" style={{ background: REV_COLORS[REV.MISMATCH] }} />
-            <span>On roll, use conflicts</span>
+            <span>
+              On roll, use conflicts{props.verifiedOnly ? ' (verified)' : ''}
+            </span>
           </div>
           <div className="revlegend-row">
             <span className="revlegend-dot" style={{ background: BASELINE_COLOR }} />
