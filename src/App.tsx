@@ -125,6 +125,38 @@ export default function App() {
     [zoomToArea],
   );
 
+  /* Clicking a bar jumps to the place it names. The sector rows carry only a
+   * name, and a name is not unique across districts in general — sectors in
+   * Kigali happen to be, but the lookup goes through the admin table rather
+   * than assuming it, so the wrong Kabeza can never be flown to. */
+  const pickSector = useCallback(
+    (name: string) => {
+      const t = dataset?.adminIndex?.table;
+      const row = t?.sectors.find((r) => r.s === name);
+      if (!row) return;
+      setFilters((f) => ({
+        ...f,
+        district: row.d,
+        sector: row.s,
+        cell: 'ALL',
+        village: 'ALL',
+      }));
+      zoomToArea(row.bb);
+    },
+    [dataset, zoomToArea],
+  );
+
+  const pickDistrict = useCallback(
+    (name: string) => {
+      const t = dataset?.adminIndex?.table;
+      const row = t?.districts.find((r) => r.d === name);
+      if (!row) return;
+      setFilters((f) => ({ ...f, district: row.d, sector: 'ALL', cell: 'ALL', village: 'ALL' }));
+      zoomToArea(row.bb);
+    },
+    [dataset, zoomToArea],
+  );
+
   const goToUpi = useCallback(
     (upi: string) => {
       if (!dataset) return;
@@ -238,6 +270,8 @@ export default function App() {
               progress={progress}
               verifiedOnly={verifiedOnly}
               onVerifiedOnly={setVerifiedOnly}
+              onPickSector={pickSector}
+              onPickDistrict={pickDistrict}
             />
           )}
         </aside>

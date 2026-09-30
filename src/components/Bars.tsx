@@ -26,11 +26,19 @@ interface Props {
   limit?: number;
   /** Appended to the value, e.g. "ha". */
   unit?: string;
+  /**
+   * Makes each row a button that jumps the map to that place.
+   *
+   * Only pass it where the row names somewhere — a sector, a district. A zone
+   * or a land-use class has no single extent to fly to, and a row that looks
+   * clickable but goes nowhere is worse than a row that does not.
+   */
+  onPick?: (key: string) => void;
 }
 
 const fmt = (v: number) => v.toLocaleString();
 
-export default function Bars({ title, data, limit, unit }: Props) {
+export default function Bars({ title, data, limit, unit, onPick }: Props) {
   const sorted = [...data].sort((a, b) => b.value - a.value).filter((d) => d.value > 0);
   const shown = limit ? sorted.slice(0, limit) : sorted;
   const rest = sorted.length - shown.length;
@@ -51,7 +59,28 @@ export default function Bars({ title, data, limit, unit }: Props) {
       <h4 className="micro chart-title">{title}</h4>
       <ul className="bars">
         {shown.map((d) => (
-          <li className="barrow" key={d.key} title={`${d.label}: ${fmt(d.value)}${unit ? ' ' + unit : ''}`}>
+          <li
+            className={'barrow' + (onPick ? ' barrow-pick' : '')}
+            key={d.key}
+            title={
+              onPick
+                ? `${d.label}: ${fmt(d.value)}${unit ? ' ' + unit : ''} — click to zoom`
+                : `${d.label}: ${fmt(d.value)}${unit ? ' ' + unit : ''}`
+            }
+            onClick={onPick ? () => onPick(d.key) : undefined}
+            onKeyDown={
+              onPick
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onPick(d.key);
+                    }
+                  }
+                : undefined
+            }
+            role={onPick ? 'button' : undefined}
+            tabIndex={onPick ? 0 : undefined}
+          >
             <div className="barhead">
               <span className="barlabel">
                 {d.label}

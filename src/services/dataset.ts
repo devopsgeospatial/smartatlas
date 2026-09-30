@@ -709,6 +709,64 @@ export function leakagePoints(
   return { type: 'FeatureCollection', features };
 }
 
+/**
+ * Built density for the Atlas surface, aggregated to a grid.
+ *
+ * WHY A GRID AND NOT THE POINTS
+ *     The leakage surface emits one point per structure because there are only
+ *     ~39,000 of them. Atlas covers all 620,000, and building that many feature
+ *     objects on every filter change would cost more time and memory than the
+ *     picture is worth. Bucketing to a ~275 m cell collapses it to a few
+ *     thousand weighted points, which a heatmap renders identically — the
+ *     kernel is wider than the cell, so nothing visible is lost.
+ *
+ * The weight is the count in the cell, so unticking 2023 in the rail turns the
+ * surface from "where the city is" into "where the city is arriving" without
+ * any extra code.
+ */
+export function densityGrid(d: Dataset, f: Filters): GeoJSON.FeatureCollection {
+  const uAllowed = useMask(d, f);
+  const yAllowed = yearMask(d, f);
+  const inArea = areaTest(d, f);
+  const minScore = Math.round(f.minScore * 254);
+
+  // ~0.0025 degrees is about 275 m at this latitude.
+  const CELL = 0.0025;
+  const counts = new Map<number, number>();
+  /* The two axes pack into one integer so the map stays primitive-keyed.
+   * Latitude is NEGATIVE here — Kigali sits at about -1.94 — so the row index
+   * is biased into positive territory before packing. Without the bias the
+   * unpacking floor() rounds the wrong way and every cell lands in the wrong
+   * place, which looks plausible on screen and is completely wrong. */
+  const BIAS = 32768;
+  const key = (gx: number, gy: number) => gx * 65536 + (gy + BIAS);
+
+  for (let i = 0; i < d.n; i++) {
+    if (inArea && !inArea(i)) continue;
+    if (minScore > 0 && d.score[i] !== 255 && d.score[i] < minScore) continue;
+    const u = d.use[i];
+    const y = d.year[i];
+    if (u >= 255 || uAllowed[u] !== 1) continue;
+    if (y >= 255 || yAllowed[y] !== 1) continue;
+    const gx = Math.round(d.lon[i] / CELL);
+    const gy = Math.round(d.lat[i] / CELL);
+    const k = key(gx, gy);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+
+  const features: GeoJSON.Feature[] = [];
+  for (const [k, n] of counts) {
+    const gx = Math.floor(k / 65536);
+    const gy = k - gx * 65536 - BIAS;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [gx * CELL, gy * CELL] },
+      properties: { w: n },
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
 /* ---- viewport ------------------------------------------------------------ */
 
 export interface Bounds {

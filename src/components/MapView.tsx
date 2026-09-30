@@ -8,7 +8,7 @@ import {
 } from '../constants';
 import { copyText } from '../lib/clipboard';
 import { formatCoords } from '../lib/search';
-import { leakagePoints, queryViewport, type Dataset } from '../services/dataset';
+import { densityGrid, leakagePoints, queryViewport, type Dataset } from '../services/dataset';
 import { CITY_BBOX } from '../sectors';
 import type { BBox, BFeature, Basemap, CameraState, Filters, LensId } from '../types';
 
@@ -70,6 +70,8 @@ export default function MapView(props: Props) {
   const [ready, setReady] = useState(false);
   /** How many structures the leakage surface is drawing, for the status chip. */
   const leakCountRef = useRef<number | null>(null);
+  /** How many structures the density surface represents, for the same chip. */
+  const densCountRef = useRef<number | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
   const propsRef = useRef(props);
   propsRef.current = props;
@@ -148,11 +150,15 @@ export default function MapView(props: Props) {
       (map.getSource('structures') as GeoJSONSource | undefined)?.setData(EMPTY as any);
       /* On the revenue lens the heatmap IS the answer at this zoom, so the
        * chip should say what it is showing rather than ask to be zoomed. */
-      const leak = propsRef.current.lens === 'revenue' ? leakCountRef.current : null;
+      const lens = propsRef.current.lens;
+      const leak = lens === 'revenue' ? leakCountRef.current : null;
+      const dens = lens === 'atlas' ? densCountRef.current : null;
       setStatus(
         leak != null
           ? `${leak.toLocaleString()} to act on · zoom in for detail`
-          : 'Zoom in to see structures',
+          : dens != null
+            ? `${dens.toLocaleString()} structures · zoom in for detail`
+            : 'Zoom in to see structures',
       );
       propsRef.current.onFeatures([]);
       return;
@@ -490,6 +496,35 @@ export default function MapView(props: Props) {
         },
       });
 
+      /* Atlas gets its own surface: built density, not leakage. Same zoom
+       * band and the same handover, but a neutral single-hue ramp — this one
+       * answers "where is the city" and must not borrow the warning colours
+       * the revenue view earns. Weighted by the count in each grid cell, so
+       * unticking 2023 turns it into a map of where the city is arriving. */
+      map.addSource('density', { type: 'geojson', data: EMPTY as any });
+      map.addLayer({
+        id: 'density-heat',
+        type: 'heatmap',
+        source: 'density',
+        maxzoom: 15,
+        layout: { visibility: 'none' },
+        paint: {
+          'heatmap-weight': ['interpolate', ['linear'], ['get', 'w'], 0, 0, 120, 1],
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 11, 8, 13, 18, 14.5, 36],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 0.5, 13, 0.9, 14.5, 1],
+          'heatmap-color': [
+            'interpolate', ['linear'], ['heatmap-density'],
+            0, 'rgba(0,0,0,0)',
+            0.2, 'rgba(30,90,96,0.35)',
+            0.45, 'rgba(46,140,138,0.55)',
+            0.7, 'rgba(94,196,188,0.7)',
+            0.88, 'rgba(168,232,214,0.82)',
+            1, 'rgba(232,250,240,0.9)',
+          ],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.8, 13.6, 0.8, 15, 0],
+        },
+      });
+
       map.addSource('structures', { type: 'geojson', data: EMPTY as any });
 
       /* The class colour is carried by the outline, not the fill, so the roof
@@ -640,11 +675,31 @@ export default function MapView(props: Props) {
     if (!map || !readyRef.current || !map.getLayer('leak-heat')) return;
     const on = props.lens === 'revenue';
     map.setLayoutProperty('leak-heat', 'visibility', on ? 'visible' : 'none');
+    // Atlas carries the density surface; compliance has no geography of its own.
+    const dens = props.lens === 'atlas';
+    if (map.getLayer('density-heat')) {
+      map.setLayoutProperty('density-heat', 'visibility', dens ? 'visible' : 'none');
+      const dsrc = map.getSource('density') as GeoJSONSource | undefined;
+      if (dsrc) {
+        if (dens && d) {
+          const g = densityGrid(d, props.filters);
+          densCountRef.current = g.features.reduce(
+            (s, ft) => s + ((ft.properties as any)?.w || 0),
+            0,
+          );
+          dsrc.setData(g as any);
+        } else {
+          densCountRef.current = null;
+          dsrc.setData(EMPTY as any);
+        }
+      }
+    }
     const src = map.getSource('leak') as GeoJSONSource | undefined;
     if (!src) return;
     if (!on || !d) {
       leakCountRef.current = null;
       src.setData(EMPTY as any);
+      schedule();
       return;
     }
     const fc = leakagePoints(d, props.filters, props.verifiedOnly);
@@ -762,6 +817,22 @@ export default function MapView(props: Props) {
               </div>
             </>
           )}
+        </div>
+      )}
+      {/* Atlas shows a key only while the density surface is what is drawn;
+        * above the handover the building colours have the filter rail as
+        * their legend and a second one here would be noise. */}
+      {props.lens === 'atlas' && heatMode && (
+        <div className="revlegend" aria-label="Built density">
+          <div className="revlegend-title">Built density</div>
+          <div className="revlegend-ramp revlegend-ramp-density" aria-hidden="true" />
+          <div className="revlegend-scale">
+            <span>sparse</span>
+            <span>dense</span>
+          </div>
+          <div className="revlegend-row revlegend-what">
+            <span>Structures matching the filters</span>
+          </div>
         </div>
       )}
       <div className="mapchip bl" aria-live="polite">

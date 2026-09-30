@@ -1352,3 +1352,36 @@ button {
   border-top: 1px solid var(--line-2);
   color: var(--tx-2);
 }
+
+/* The Atlas key uses the density layer's own ramp — teal through to pale,
+ * deliberately not the leakage ramp, so the two surfaces never read as the
+ * same measurement in different places. */
+.revlegend-ramp-density {
+  background: linear-gradient(
+    to right,
+    rgba(30, 90, 96, 0.35),
+    rgba(46, 140, 138, 0.55),
+    rgba(94, 196, 188, 0.7),
+    rgba(168, 232, 214, 0.82),
+    rgba(232, 250, 240, 0.9)
+  );
+}
+
+/* A bar row that flies the map. The affordance is deliberately quiet — these
+ * sit in a dense panel and a button-looking row per line would shout over the
+ * numbers, which are the point. Hover and focus do the work. */
+.barrow-pick {
+  cursor: pointer;
+  border-radius: var(--r-1);
+  margin-inline: calc(var(--sp-3) * -1);
+  padding-inline: var(--sp-3);
+  transition: background 120ms ease;
+}
+.barrow-pick:hover,
+.barrow-pick:focus-visible {
+  background: color-mix(in srgb, var(--tx-1) 7%, transparent);
+}
+.barrow-pick:focus-visible {
+  outline: 1px solid var(--ac-1);
+  outline-offset: 0;
+}

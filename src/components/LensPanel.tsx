@@ -16,6 +16,9 @@ interface Props {
   /** Revenue view: count use conflicts only where ground-confirmed. */
   verifiedOnly: boolean;
   onVerifiedOnly: (v: boolean) => void;
+  /** Jump the map to a sector or district named by a bar row. */
+  onPickSector: (name: string) => void;
+  onPickDistrict: (name: string) => void;
 }
 
 const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString());
@@ -85,6 +88,8 @@ export default function LensPanel({
   progress,
   verifiedOnly,
   onVerifiedOnly,
+  onPickSector,
+  onPickDistrict,
 }: Props) {
   if (!stats) {
     const mb = (bytes: number) => (bytes / 1e6).toFixed(1);
@@ -212,6 +217,7 @@ export default function LensPanel({
           title="Not in tax roll — top sectors"
           data={sectorBars(selection?.sectorAbsent, REV_COLORS[REV.ABSENT])}
           limit={8}
+          onPick={onPickSector}
         />
 
         <Bars
@@ -222,6 +228,7 @@ export default function LensPanel({
           }
           data={sectorBars(conflictBySector, REV_COLORS[REV.MISMATCH])}
           limit={8}
+          onPick={onPickSector}
         />
 
         {t.coarserThanAsked && (
