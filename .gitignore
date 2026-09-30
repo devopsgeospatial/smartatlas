@@ -18,3 +18,8 @@ __pycache__
 out/
 Parcels.geojson
 _parcel_upis.txt
+
+# Rental-annex analysis scripts — kept out of the public repo deliberately.
+tools/rental_annex_rpi.py
+tools/rental_calibrate.py
+tools/rental_flags.py
