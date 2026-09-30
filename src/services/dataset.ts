@@ -217,6 +217,7 @@ export interface RawStats {
     zoneLabels: Record<string, string>;
     sectorNames: string[];
     zoneNames: string[];
+    declaredNames?: string[];
     groundConfirmed: number;
     /** The RRA registry reconciliation, written by tools/prepare_data.py. */
     revenue?: {
@@ -250,6 +251,9 @@ export interface Dataset {
   zone: Uint8Array;
   /** RRA registry verdict per structure. See REV in constants.ts. */
   rev: Uint8Array;
+  /** Declared use, indexed into declaredNames. */
+  declared: Uint8Array;
+  declaredNames: string[];
   /** Footprint outlines: vertex range per structure, deltas from the centroid. */
   ringStart: Uint32Array;
   dx: Int16Array;
@@ -364,9 +368,9 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   /* SPAB2 added the administrative unit index and dropped the sector byte it
    * replaces. A cached SPAB1 file against this build would decode into
    * nonsense, so the mismatch is fatal rather than best-effort. */
-  if (magic !== 'SPAB4') {
+  if (magic !== 'SPAB5') {
     throw new Error(
-      `Unexpected dataset format ${magic} — expected SPAB4. Re-run tools/prepare_data.py, ` +
+      `Unexpected dataset format ${magic} — expected SPAB5. Re-run tools/prepare_data.py, ` +
         'or hard-reload if an older dataset is cached.',
     );
   }
@@ -399,6 +403,11 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
    * 3 not in roll. See REV in constants.ts — the map legend and the revenue
    * panel both read those labels so they cannot disagree. */
   const rev = new Uint8Array(buf, o, n);
+  o += n;
+  /* SPAB5: declared use, as an index into stats.buildings.declaredNames. The
+   * dossier shows the registry's exact wording beside the model's prediction,
+   * so the class is not enough — the string is the point. */
+  const declared = new Uint8Array(buf, o, n);
 
   // Footprint outlines.
   let ringStart = new Uint32Array(n + 1);
@@ -433,6 +442,8 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
     admin,
     zone,
     rev,
+    declared,
+    declaredNames: stats.buildings.declaredNames || [],
     ringStart,
     dx,
     dy,
@@ -459,6 +470,12 @@ export interface Selection {
   byZone: Record<string, number>;
   /** Registry verdict counts, keyed by the REV code. */
   byRev: Record<number, number>;
+  /** The same, over structures new since 2023 — the defensible cohort. */
+  byRev2025: Record<number, number>;
+  /** Not in the roll and new since 2023, by sector. */
+  sectorAbsent: Record<string, number>;
+  /** Use conflicts by sector, all cohorts. */
+  sectorMismatch: Record<string, number>;
   /** Not in the roll AND first seen in 2025 — the defensible leakage figure. */
   newUnregistered: number;
 }
@@ -555,6 +572,13 @@ export function summarise(d: Dataset, filters: Filters): Selection {
    * the panel. A tile that ignored the filter beside it would be worse than
    * no tile. */
   const byRev: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  /* Registry status is only reported over structures new since 2023. The
+   * extract begins in 2019, so absence from it says nothing about a building
+   * that was already standing — and a list of 200,000 "unregistered" parcels
+   * that turn out to have been registered in 2013 destroys the whole case. */
+  const byRev2025: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  const sectorAbsent: Record<string, number> = {};
+  const sectorMismatch: Record<string, number> = {};
   let newUnregistered = 0;
   ORDER.forEach((c) => (byUse[c] = 0));
   YEAR_ORDER.forEach((y) => (byYear[y] = 0));
@@ -579,12 +603,27 @@ export function summarise(d: Dataset, filters: Filters): Selection {
       if (z) byZone[z] = (byZone[z] || 0) + 1;
       const r = d.rev[i];
       byRev[r] = (byRev[r] || 0) + 1;
+      const isNew = y < 255 && YEAR_ORDER[y] === '2025';
+      if (isNew) byRev2025[r] = (byRev2025[r] || 0) + 1;
       // "New and unregistered" is the one claim the registry's 2019 start
       // date supports, so it is counted only over structures new since 2023.
-      if (r === 3 && y < 255 && YEAR_ORDER[y] === '2025') newUnregistered++;
+      if (r === 3 && isNew) {
+        newUnregistered++;
+        const s = d.sectorNames[d.sector[i]];
+        if (s) sectorAbsent[s] = (sectorAbsent[s] || 0) + 1;
+      }
+      /* Use conflicts carry no such caveat: the parcel is in the registry
+       * whatever year the structure appeared, so every cohort counts. */
+      if (r === 2) {
+        const s = d.sectorNames[d.sector[i]];
+        if (s) sectorMismatch[s] = (sectorMismatch[s] || 0) + 1;
+      }
     }
   }
-  return { matches, byUse, byYear, byZone, byRev, newUnregistered };
+  return {
+    matches, byUse, byYear, byZone, byRev, byRev2025,
+    sectorAbsent, sectorMismatch, newUnregistered,
+  };
 }
 
 /* ---- viewport ------------------------------------------------------------ */
@@ -645,6 +684,7 @@ function toFeature(d: Dataset, i: number): BFeature {
       /* The registry verdict travels with the feature so the map can colour on
        * it without a second lookup per structure at paint time. */
       rev: d.rev[i],
+      declared_use: d.declaredNames[d.declared[i]] || undefined,
     },
   };
 }

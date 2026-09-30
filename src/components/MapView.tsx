@@ -620,26 +620,24 @@ export default function MapView(props: Props) {
       {/* The revenue lens recolours the map, so it has to say what the colours
         * mean. Without this the reader is guessing, and the baseline swatch in
         * particular carries the caveat that makes the view defensible. */}
+      {/* Compact by design: three swatches and a title. The caveat that used
+        * to sit here is said out loud in the room instead, and a legend that
+        * has to be read is a legend that covers the map. */}
       {props.lens === 'revenue' && (
-        <div className="revlegend" aria-label="Registry status">
-          <div className="revlegend-title">Potential tax leakage</div>
+        <div className="revlegend" aria-label="Revenue leakage">
+          <div className="revlegend-title">Potential revenue leakage</div>
           <div className="revlegend-row">
             <span className="revlegend-dot" style={{ background: REV_COLORS[REV.ABSENT] }} />
-            <span>New since 2023, not in tax roll</span>
+            <span>Built since 2023, not on roll</span>
           </div>
           <div className="revlegend-row">
             <span className="revlegend-dot" style={{ background: REV_COLORS[REV.MISMATCH] }} />
-            <span>In tax roll, use conflicts</span>
+            <span>On roll, use conflicts</span>
           </div>
           <div className="revlegend-row">
             <span className="revlegend-dot" style={{ background: BASELINE_COLOR }} />
-            <span>Baseline — reconciled or not assessable</span>
+            <span>Baseline</span>
           </div>
-          <p className="revlegend-note">
-            The registry extract runs 2019&ndash;2026, so a structure standing in 2023 and
-            missing from it may simply predate it — those stay baseline. Use conflicts are
-            shown for every year, because the parcel is in the registry either way.
-          </p>
         </div>
       )}
       <div className="mapchip bl" aria-live="polite">

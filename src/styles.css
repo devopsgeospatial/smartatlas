@@ -1248,8 +1248,8 @@ button {
   right: var(--sp-5);
   bottom: var(--sp-5);
   z-index: 5;
-  max-width: 250px;
-  padding: 10px 12px;
+  max-width: 200px;
+  padding: 8px 10px;
   background: color-mix(in srgb, var(--bg-0) 90%, transparent);
   border: 1px solid var(--line-2);
   border-radius: var(--r-1);
@@ -1268,8 +1268,8 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 11.5px;
-  line-height: 1.5;
+  font-size: 10.5px;
+  line-height: 1.45;
   color: var(--tx-1);
 }
 .revlegend-dot {

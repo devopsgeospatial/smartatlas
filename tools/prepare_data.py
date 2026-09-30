@@ -282,6 +282,11 @@ def build_buildings(admin_index, upi_units):
     lons, lats = [], []
     uses, years, floors, scores, areas, heights = [], [], [], [], [], []
     admin_idx, sector_idx, zone_idx, revs = [], [], [], []
+    # Declared use, as an index into a small string table. 42 distinct values
+    # over 620k records, so a byte each plus one table beats repeating the
+    # strings — and the dossier needs the exact wording, not a class.
+    declared_idx = []
+    declared_names, declared_key = [], {}
     # Footprint outlines: Int16 deltas from the centroid at 1e-6 degrees
     # (about 0.11 m), which is far finer than the footprints themselves.
     gx = array.array("h")
@@ -383,6 +388,12 @@ def build_buildings(admin_index, upi_units):
 
         upis.append((p.get("upi") or "").strip())
 
+        dec = (p.get("declared_use") or "").strip()
+        if dec not in declared_key:
+            declared_key[dec] = len(declared_names)
+            declared_names.append(dec)
+        declared_idx.append(min(254, declared_key[dec]))
+
         rev = revenue_code(p)
         revs.append(rev)
         by_rev[rev] += 1
@@ -423,7 +434,7 @@ def build_buildings(admin_index, upi_units):
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "buildings.bin"), "wb") as f:
-        f.write(b"SPAB4")
+        f.write(b"SPAB5")
         f.write(struct.pack("<I", n))
         f.write(struct.pack(f"<{n}f", *lons))
         f.write(struct.pack(f"<{n}f", *lats))
@@ -438,6 +449,8 @@ def build_buildings(admin_index, upi_units):
         f.write(bytes(zone_idx))
         # SPAB4 adds this one byte: the registry verdict per structure.
         f.write(bytes(revs))
+        # SPAB5 adds the declared-use index; the names live in stats.json.
+        f.write(bytes(declared_idx))
 
     goff.append(len(gx))  # terminating offset
     with open(os.path.join(OUT, "geometry.bin"), "wb") as f:
@@ -462,6 +475,7 @@ def build_buildings(admin_index, upi_units):
         "total": n,
         "sectorNames": sector_names,
         "zoneNames": zone_names,
+        "declaredNames": declared_names,
         "byUse": dict(by_use),
         "byYear": dict(by_year),
         "byZone": dict(by_zone),

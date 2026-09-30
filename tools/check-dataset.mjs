@@ -38,8 +38,9 @@ const admin = new Uint16Array(buf.slice(o, o + n * 2)); o += n * 2;
 const sector = new Uint8Array(buf, o, n); o += n;
 const zone = new Uint8Array(buf, o, n); o += n;
 const rev = new Uint8Array(buf, o, n); o += n;
+const declared = new Uint8Array(buf, o, n); o += n;
 
-check('magic is SPAB4', magic === 'SPAB4', magic);
+check('magic is SPAB5', magic === 'SPAB5', magic);
 check('record count matches stats.json', n === stats.buildings.total, n.toLocaleString());
 check('all attribute bytes consumed', o === buf.byteLength, `${o} of ${buf.byteLength}`);
 
@@ -116,6 +117,15 @@ check(
     check('newUnregistered is 2025-only', R.newUnregistered === (R.byYear['2025']?.['3'] || 0),
       String(R.newUnregistered));
   }
+}
+
+// Declared use must index a real name, or the dossier prints undefined.
+{
+  const names = stats.buildings.declaredNames || [];
+  let bad = 0, maxIdx = 0;
+  for (let i = 0; i < n; i++) { if (declared[i] >= names.length) bad++; if (declared[i] > maxIdx) maxIdx = declared[i]; }
+  check('declared-use indices resolve', bad === 0 && names.length > 0,
+    bad ? `${bad} out of range` : `${names.length} declared values, max index ${maxIdx}`);
 }
 
 check('zone indices resolve', badZone === 0, `${zn.length} zones`);

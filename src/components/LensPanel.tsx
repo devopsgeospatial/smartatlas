@@ -108,12 +108,21 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
 
   if (lens === 'revenue') {
     const t = taxFor(tax, filters);
-    /* Read from the selection so the bars narrow with the filters, falling
-     * back to the packed totals before the first summarise has run. */
+
+    /* Registry status is reported over structures new since 2023 only.
+     *
+     * The extract runs 2019-2026, so absence from it says nothing about a
+     * building that was already standing in 2023 — it may have been registered
+     * in 2013. Handing an assessor 200,000 "unregistered" parcels that turn out
+     * to be on the roll would cost more credibility than the larger number
+     * could ever buy, so the panel never offers it. */
     const revSrc: Record<number, number> =
-      selection?.byRev ??
+      selection?.byRev2025 ??
       Object.fromEntries(
-        Object.entries(b.revenue?.byCode || {}).map(([k, v]) => [Number(k), v as number]),
+        Object.entries(b.revenue?.byYear?.['2025'] || {}).map(([k, v]) => [
+          Number(k),
+          v as number,
+        ]),
       );
     const revBars: BarDatum[] = REV_ORDER.filter((c) => (revSrc[c] || 0) > 0).map((c) => ({
       key: String(c),
@@ -121,6 +130,13 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
       value: revSrc[c] || 0,
       color: REV_COLORS[c],
     }));
+
+    const sectorBars = (src: Record<string, number> | undefined, color: string): BarDatum[] =>
+      Object.entries(src || {})
+        .filter(([, v]) => v > 0)
+        .sort((a, c) => c[1] - a[1])
+        .map(([s, v]) => ({ key: s, label: s, value: v, color }));
+
     /* A parcel carries no predicted use, no detection year and no model score,
      * so only the area filter can narrow this lens. Saying so is better than
      * letting the figures sit unchanged and look broken. */
@@ -135,33 +151,42 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
 
         <Scope filters={filters} />
 
-        <div className="stat2grid">
-          <Stat label="Undeveloped taxable parcels" value={n(t.vacant)} />
-          <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
-        </div>
-
-        <h4 className="lens-sub">Against the RRA registry</h4>
+        {/* The registry findings lead, because they are the ones an assessor
+          * can act on this week. Undeveloped parcels are context and sit
+          * underneath. */}
+        <h4 className="lens-sub">Revenue leakage</h4>
 
         <div className="stat2grid">
           <Stat
             label="New since 2023, not in tax roll"
             value={n(selection?.newUnregistered ?? b.revenue?.newUnregistered)}
-            note="the claim the registry's 2019 start date supports"
           />
           <Stat
             label="In tax roll, use conflicts"
             value={n(selection?.byRev?.[REV.MISMATCH] ?? b.revenue?.useMismatch)}
-            note="declared use differs from what is standing"
           />
         </div>
 
-        <Bars title="Registry status" data={revBars} />
+        <Bars title="Registry status — built since 2023" data={revBars} />
 
-        <p className="lens-note">
-          The registry extract runs 2019&ndash;2026. A structure standing in 2023 and
-          absent from it may simply predate it, so only structures new since 2023 are
-          counted as unregistered. The 2023 stock is shown on the map as baseline.
-        </p>
+        <Bars
+          title="Not in tax roll — top sectors"
+          data={sectorBars(selection?.sectorAbsent, REV_COLORS[REV.ABSENT])}
+          limit={8}
+        />
+
+        <Bars
+          title="Use conflicts — top sectors"
+          data={sectorBars(selection?.sectorMismatch, REV_COLORS[REV.MISMATCH])}
+          limit={8}
+        />
+
+        <h4 className="lens-sub">Undeveloped land</h4>
+
+        <div className="stat2grid">
+          <Stat label="Undeveloped taxable parcels" value={n(t.vacant)} />
+          <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
+        </div>
 
         {t.coarserThanAsked && (
           <p className="lens-note">
@@ -176,41 +201,6 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
             Use, year and confidence narrow the structures only. A parcel has none of them, so
             these figures follow the area.
           </p>
-        )}
-
-        {t.byDistrict && (
-          <Bars
-            title="Undeveloped parcels by district"
-            data={Object.entries(t.byDistrict).map(([d, v]) => ({
-              key: d,
-              label: d,
-              value: v,
-            }))}
-          />
-        )}
-
-        <Bars
-          title="Undeveloped parcels by zone"
-          data={Object.entries(t.byZone).map(([z, v]) => ({
-            key: z,
-            label: z,
-            note: zoneDesc(b.zoneLabels[z]),
-            value: v,
-          }))}
-          limit={8}
-        />
-
-        {t.bySector && (
-          <Bars
-            title="Top sectors"
-            data={t.bySector.map((r) => ({
-              key: r.sector,
-              label: r.sector,
-              note: r.district,
-              value: r.vacant,
-            }))}
-            limit={8}
-          />
         )}
       </div>
     );

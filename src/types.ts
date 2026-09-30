@@ -21,6 +21,8 @@ export interface BuildingProps {
   zoneCode?: string;
   /** Registry verdict: see REV in constants.ts. */
   rev?: number;
+  /** Use as declared to RRA, verbatim. Empty when the parcel is not on the roll. */
+  declared_use?: string;
   /** Footprint centroid, so callers never have to unwrap the geometry. */
   lon?: number;
   lat?: number;
