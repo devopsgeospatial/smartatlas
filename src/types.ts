@@ -19,6 +19,8 @@ export interface BuildingProps {
   Proposed_Use?: string;
   /** Master-plan zone code, e.g. R1A. */
   zoneCode?: string;
+  /** Registry verdict: see REV in constants.ts. */
+  rev?: number;
   /** Footprint centroid, so callers never have to unwrap the geometry. */
   lon?: number;
   lat?: number;

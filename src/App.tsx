@@ -200,6 +200,7 @@ export default function App() {
         <MapView
           dataset={dataset}
           loadFailed={error !== null}
+          lens={lens}
           filters={filters}
           selectedId={selected ? selected.properties.OBJECTID : null}
           flyTo={flyTo}

@@ -36,6 +36,42 @@ USE_INDEX = {c: i for i, c in enumerate(USE_ORDER)}
 YEAR_ORDER = ["2025", "2023"]
 YEAR_INDEX = {y: i for i, y in enumerate(YEAR_ORDER)}
 
+# ----------------------------------------------------------------------------
+# Revenue status: the reconciliation against the RRA registry, one byte.
+#
+# The two source columns are collapsed into a single code because they are not
+# independent — "Not in tax roll" always carries use_status "Not checked", and
+# a use verdict only exists inside the roll. Packing them separately would let
+# a filter express a combination that cannot occur.
+#
+# 0 is reserved for "no verdict": the structure carries no UPI, so it was never
+# put to the registry at all. That is a data-quality state, not a finding, and
+# the map draws it as such rather than colouring it like an unregistered plot.
+# ----------------------------------------------------------------------------
+REV_NONE = 0        # no UPI — could not be checked
+REV_MATCH = 1       # in the roll, declared use agrees with observed
+REV_MISMATCH = 2    # in the roll, declared use conflicts
+REV_ABSENT = 3      # not in the roll
+REV_LABELS = {
+    REV_NONE: "No UPI",
+    REV_MATCH: "In tax roll",
+    REV_MISMATCH: "Use mismatch",
+    REV_ABSENT: "Not in tax roll",
+}
+
+
+def revenue_code(p):
+    """Collapse tax_roll_status and use_status into one packed code."""
+    roll = (p.get("tax_roll_status") or "").strip().lower()
+    use = (p.get("use_status") or "").strip().lower()
+    if not roll:
+        return REV_NONE
+    if roll.startswith("not in"):
+        return REV_ABSENT
+    if roll.startswith("in tax"):
+        return REV_MISMATCH if use == "mismatch" else REV_MATCH
+    return REV_NONE
+
 
 # Tokens the source has used for an affirmative. The layer has shipped this
 # field as null/"Yes" and as "No"/"Yes" in different revisions, and plain
@@ -245,7 +281,7 @@ def read_dbf(path):
 def build_buildings(admin_index, upi_units):
     lons, lats = [], []
     uses, years, floors, scores, areas, heights = [], [], [], [], [], []
-    admin_idx, sector_idx, zone_idx = [], [], []
+    admin_idx, sector_idx, zone_idx, revs = [], [], [], []
     # Footprint outlines: Int16 deltas from the centroid at 1e-6 degrees
     # (about 0.11 m), which is far finer than the footprints themselves.
     gx = array.array("h")
@@ -261,6 +297,11 @@ def build_buildings(admin_index, upi_units):
     by_district = Counter()
     by_sector = Counter()
     by_status = Counter()
+    by_rev = Counter()
+    by_rev_year = defaultdict(Counter)
+    by_rev_district = defaultdict(Counter)
+    by_rev_sector = defaultdict(Counter)
+    exempted = 0
     zone_labels = {}
     ground = 0
     n = 0
@@ -342,6 +383,15 @@ def build_buildings(admin_index, upi_units):
 
         upis.append((p.get("upi") or "").strip())
 
+        rev = revenue_code(p)
+        revs.append(rev)
+        by_rev[rev] += 1
+        by_rev_year[year][rev] += 1
+        by_rev_district[(p.get("District") or "").strip()][rev] += 1
+        by_rev_sector[sec][rev] += 1
+        if str(p.get("exempted") or "").strip().lower() in AFFIRMATIVE:
+            exempted += 1
+
         by_use[use] += 1
         by_year[year] += 1
         if zone:
@@ -373,7 +423,7 @@ def build_buildings(admin_index, upi_units):
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "buildings.bin"), "wb") as f:
-        f.write(b"SPAB3")
+        f.write(b"SPAB4")
         f.write(struct.pack("<I", n))
         f.write(struct.pack(f"<{n}f", *lons))
         f.write(struct.pack(f"<{n}f", *lats))
@@ -386,6 +436,8 @@ def build_buildings(admin_index, upi_units):
         f.write(struct.pack(f"<{n}H", *admin_idx))
         f.write(bytes(sector_idx))
         f.write(bytes(zone_idx))
+        # SPAB4 adds this one byte: the registry verdict per structure.
+        f.write(bytes(revs))
 
     goff.append(len(gx))  # terminating offset
     with open(os.path.join(OUT, "geometry.bin"), "wb") as f:
@@ -419,6 +471,22 @@ def build_buildings(admin_index, upi_units):
         "bySector": dict(by_sector),
         "byStatus": dict(by_status),
         "groundConfirmed": ground,
+        # The registry reconciliation. Keyed by the packed code so the panel
+        # and the map legend cannot drift apart: both read REV_LABELS.
+        "revenue": {
+            "labels": {str(k): v for k, v in REV_LABELS.items()},
+            "byCode": {str(k): v for k, v in sorted(by_rev.items())},
+            "byYear": {y: {str(k): v for k, v in sorted(c.items())}
+                       for y, c in by_rev_year.items()},
+            "byDistrict": {d: {str(k): v for k, v in sorted(c.items())}
+                           for d, c in by_rev_district.items()},
+            "bySector": {s: {str(k): v for k, v in sorted(c.items())}
+                         for s, c in by_rev_sector.items()},
+            # The two figures the revenue view is built to show.
+            "newUnregistered": by_rev_year.get("2025", {}).get(REV_ABSENT, 0),
+            "useMismatch": by_rev.get(REV_MISMATCH, 0),
+            "exempted": exempted,
+        },
     }
 
 

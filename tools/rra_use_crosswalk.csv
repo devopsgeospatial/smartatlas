@@ -1,0 +1,31 @@
+declared_value,sparc_use_code
+residential,RI
+residential - owner occupied,RI
+owner occupied,RI
+dwelling,RI
+house,RI
+residential - rented,RI
+rental,RI
+planned residential,ROR
+apartment,RAP
+apartments,RAP
+flat,RAP
+commercial,CM
+business,CM
+shop,CM
+retail,CM
+office,CM
+hotel,CM
+mixed use,CMI
+mixed,CMI
+commercial and residential,CMI
+industrial,I
+factory,I
+warehouse,I
+workshop,I
+public institution,PI
+institutional,PI
+school,PI
+church,PI
+health facility,PI
+government,PI

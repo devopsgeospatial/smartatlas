@@ -218,6 +218,17 @@ export interface RawStats {
     sectorNames: string[];
     zoneNames: string[];
     groundConfirmed: number;
+    /** The RRA registry reconciliation, written by tools/prepare_data.py. */
+    revenue?: {
+      labels: Record<string, string>;
+      byCode: Record<string, number>;
+      byYear: Record<string, Record<string, number>>;
+      byDistrict: Record<string, Record<string, number>>;
+      bySector: Record<string, Record<string, number>>;
+      newUnregistered: number;
+      useMismatch: number;
+      exempted: number;
+    };
   };
   tax: TaxTable;
 }
@@ -237,6 +248,8 @@ export interface Dataset {
   /** Index into stats.buildings.sectorNames. Present on every structure. */
   sector: Uint8Array;
   zone: Uint8Array;
+  /** RRA registry verdict per structure. See REV in constants.ts. */
+  rev: Uint8Array;
   /** Footprint outlines: vertex range per structure, deltas from the centroid. */
   ringStart: Uint32Array;
   dx: Int16Array;
@@ -351,9 +364,9 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   /* SPAB2 added the administrative unit index and dropped the sector byte it
    * replaces. A cached SPAB1 file against this build would decode into
    * nonsense, so the mismatch is fatal rather than best-effort. */
-  if (magic !== 'SPAB3') {
+  if (magic !== 'SPAB4') {
     throw new Error(
-      `Unexpected dataset format ${magic} — expected SPAB3. Re-run tools/prepare_data.py, ` +
+      `Unexpected dataset format ${magic} — expected SPAB4. Re-run tools/prepare_data.py, ` +
         'or hard-reload if an older dataset is cached.',
     );
   }
@@ -381,6 +394,11 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   const sector = new Uint8Array(buf, o, n);
   o += n;
   const zone = new Uint8Array(buf, o, n);
+  o += n;
+  /* SPAB4: the RRA registry verdict. 0 no UPI, 1 in roll, 2 use mismatch,
+   * 3 not in roll. See REV in constants.ts — the map legend and the revenue
+   * panel both read those labels so they cannot disagree. */
+  const rev = new Uint8Array(buf, o, n);
 
   // Footprint outlines.
   let ringStart = new Uint32Array(n + 1);
@@ -414,6 +432,7 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
     height,
     admin,
     zone,
+    rev,
     ringStart,
     dx,
     dy,
@@ -438,6 +457,10 @@ export interface Selection {
   byUse: Record<string, number>;
   byYear: Record<string, number>;
   byZone: Record<string, number>;
+  /** Registry verdict counts, keyed by the REV code. */
+  byRev: Record<number, number>;
+  /** Not in the roll AND first seen in 2025 — the defensible leakage figure. */
+  newUnregistered: number;
 }
 
 /**
@@ -526,6 +549,13 @@ export function summarise(d: Dataset, filters: Filters): Selection {
   const byUse: Record<string, number> = {};
   const byYear: Record<string, number> = {};
   const byZone: Record<string, number> = {};
+  /* Registry verdict counts, and the two figures the revenue lens leads on.
+   * Counted here rather than read from stats.json so they narrow with every
+   * filter — an area, a use, a confidence floor — exactly like the rest of
+   * the panel. A tile that ignored the filter beside it would be worse than
+   * no tile. */
+  const byRev: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  let newUnregistered = 0;
   ORDER.forEach((c) => (byUse[c] = 0));
   YEAR_ORDER.forEach((y) => (byYear[y] = 0));
 
@@ -547,9 +577,14 @@ export function summarise(d: Dataset, filters: Filters): Selection {
       matches++;
       const z = d.zoneNames[d.zone[i]];
       if (z) byZone[z] = (byZone[z] || 0) + 1;
+      const r = d.rev[i];
+      byRev[r] = (byRev[r] || 0) + 1;
+      // "New and unregistered" is the one claim the registry's 2019 start
+      // date supports, so it is counted only over structures new since 2023.
+      if (r === 3 && y < 255 && YEAR_ORDER[y] === '2025') newUnregistered++;
     }
   }
-  return { matches, byUse, byYear, byZone };
+  return { matches, byUse, byYear, byZone, byRev, newUnregistered };
 }
 
 /* ---- viewport ------------------------------------------------------------ */
@@ -607,6 +642,9 @@ function toFeature(d: Dataset, i: number): BFeature {
       area: d.area[i] || null,
       Proposed_Use: d.stats.buildings.zoneLabels[d.zoneNames[d.zone[i]]] || undefined,
       zoneCode: d.zoneNames[d.zone[i]] || undefined,
+      /* The registry verdict travels with the feature so the map can colour on
+       * it without a second lookup per structure at paint time. */
+      rev: d.rev[i],
     },
   };
 }

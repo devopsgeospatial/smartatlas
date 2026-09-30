@@ -1011,7 +1011,18 @@ button {
   margin: 0 0 var(--sp-5);
   letter-spacing: -0.01em;
 }
-.lens-sub { margin: var(--sp-7) 0 var(--sp-4); }
+/* Section label inside a lens. Takes the .micro treatment rather than the h4
+ * default, which would otherwise outweigh .lens-title above it. */
+.lens-sub {
+  margin: var(--sp-7) 0 var(--sp-4);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--tx-3);
+}
 
 /* Names the area the figures below are for. Without it a narrowed lens and a
    city-wide one look identical apart from the numbers. */
@@ -1223,4 +1234,65 @@ button {
   margin-right: auto;
   font-size: 10.5px;
   color: var(--tx-2);
+}
+
+/* ---- revenue lens legend --------------------------------------------------
+ * Bottom right, clear of the status chip on the left and the basemap bar on
+ * top. Sits on the same translucent ground as .mapchip so the map reads
+ * through it, but it carries real text rather than a single line, so it gets
+ * the body font instead of the mono one. Prefixed revlegend- throughout
+ * because .legend and .note already mean other things in this stylesheet.
+ * -------------------------------------------------------------------------- */
+.revlegend {
+  position: absolute;
+  right: var(--sp-5);
+  bottom: var(--sp-5);
+  z-index: 5;
+  max-width: 250px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg-0) 90%, transparent);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.revlegend-title {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tx-3);
+  margin-bottom: 7px;
+}
+.revlegend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--tx-1);
+}
+.revlegend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+.revlegend-note {
+  margin: 8px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-2);
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--tx-3);
+}
+
+@media (max-width: 900px) {
+  .revlegend {
+    max-width: 190px;
+    padding: 8px 9px;
+  }
+  .revlegend-note {
+    display: none;
+  }
 }

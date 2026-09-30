@@ -3,12 +3,14 @@ import maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MLMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { CONFIG } from '../config';
-import { ORDER, token, useColor } from '../constants';
+import {
+  BASELINE_COLOR, ORDER, REV, REV_COLORS, token, useColor,
+} from '../constants';
 import { copyText } from '../lib/clipboard';
 import { formatCoords } from '../lib/search';
 import { queryViewport, type Dataset } from '../services/dataset';
 import { CITY_BBOX } from '../sectors';
-import type { BBox, BFeature, Basemap, CameraState, Filters } from '../types';
+import type { BBox, BFeature, Basemap, CameraState, Filters, LensId } from '../types';
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 const EMPTY = { type: 'FeatureCollection', features: [] } as const;
@@ -41,6 +43,8 @@ export interface FlyTarget {
 
 interface Props {
   dataset: Dataset | null;
+  /** Which lens is open. The revenue lens repaints the map on registry status. */
+  lens: LensId;
   /** The load threw, so "loading" would be a lie. */
   loadFailed?: boolean;
   filters: Filters;
@@ -64,7 +68,39 @@ export default function MapView(props: Props) {
   const [basemap, setBasemap] = useState<Basemap>('imagery');
   const [status, setStatus] = useState<string>('Zoom in to see structures');
 
+  /**
+   * How the structures are coloured, which depends on the lens.
+   *
+   * Everywhere but the revenue lens the map answers "what is this building",
+   * so it colours by use. On the revenue lens it answers a different question
+   * — "can RRA act on this" — and colouring by use there would leave the
+   * reader translating between the panel and the map.
+   *
+   * The baseline treatment is applied by finding, not by cohort, because the
+   * registry's 2019 start date does not bite equally on the two:
+   *
+   *   Not in the roll    only defensible for structures new since 2023. A 2023
+   *                      structure absent from the extract may simply predate
+   *                      it, so it is drawn as baseline rather than claimed.
+   *   Use conflicts      defensible in every cohort. The parcel IS in the
+   *                      extract, so when it entered is irrelevant — and 2023
+   *                      holds most of them, so suppressing that cohort would
+   *                      hide the larger of the two findings.
+   *
+   * Everything reconciled, and everything that could not be checked, stays
+   * quiet. Only what an assessor could act on takes a colour.
+   */
   const colorExpr = (): any => {
+    if (propsRef.current.lens === 'revenue') {
+      const isNew = ['==', ['get', 'acquisition_date'], '2025'];
+      const rev = ['to-number', ['get', 'rev'], -1];
+      return [
+        'case',
+        ['all', ['==', rev, REV.ABSENT], isNew], REV_COLORS[REV.ABSENT],
+        ['==', rev, REV.MISMATCH], REV_COLORS[REV.MISMATCH],
+        BASELINE_COLOR,
+      ];
+    }
     const m: any[] = ['match', ['get', 'lu_cod_pred']];
     ORDER.forEach((c) => m.push(c, useColor(c)));
     m.push(token('--tx-3', '#7e918f'));
@@ -526,10 +562,12 @@ export default function MapView(props: Props) {
     props.filters.minScore,
   ]);
 
+  /* Switching lens only changes how the same structures are coloured, so this
+   * repaints rather than re-querying the viewport. */
   useEffect(() => {
     repaint();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.selectedId]);
+  }, [props.selectedId, props.lens]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -579,6 +617,31 @@ export default function MapView(props: Props) {
           </button>
         ))}
       </div>
+      {/* The revenue lens recolours the map, so it has to say what the colours
+        * mean. Without this the reader is guessing, and the baseline swatch in
+        * particular carries the caveat that makes the view defensible. */}
+      {props.lens === 'revenue' && (
+        <div className="revlegend" aria-label="Registry status">
+          <div className="revlegend-title">Potential tax leakage</div>
+          <div className="revlegend-row">
+            <span className="revlegend-dot" style={{ background: REV_COLORS[REV.ABSENT] }} />
+            <span>New since 2023, not in tax roll</span>
+          </div>
+          <div className="revlegend-row">
+            <span className="revlegend-dot" style={{ background: REV_COLORS[REV.MISMATCH] }} />
+            <span>In tax roll, use conflicts</span>
+          </div>
+          <div className="revlegend-row">
+            <span className="revlegend-dot" style={{ background: BASELINE_COLOR }} />
+            <span>Baseline — reconciled or not assessable</span>
+          </div>
+          <p className="revlegend-note">
+            The registry extract runs 2019&ndash;2026, so a structure standing in 2023 and
+            missing from it may simply predate it — those stay baseline. Use conflicts are
+            shown for every year, because the parcel is in the registry either way.
+          </p>
+        </div>
+      )}
       <div className="mapchip bl" aria-live="polite">
         {status}
       </div>

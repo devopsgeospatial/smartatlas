@@ -37,8 +37,9 @@ const height = new Uint16Array(buf.slice(o, o + n * 2)); o += n * 2;
 const admin = new Uint16Array(buf.slice(o, o + n * 2)); o += n * 2;
 const sector = new Uint8Array(buf, o, n); o += n;
 const zone = new Uint8Array(buf, o, n); o += n;
+const rev = new Uint8Array(buf, o, n); o += n;
 
-check('magic is SPAB3', magic === 'SPAB3', magic);
+check('magic is SPAB4', magic === 'SPAB4', magic);
 check('record count matches stats.json', n === stats.buildings.total, n.toLocaleString());
 check('all attribute bytes consumed', o === buf.byteLength, `${o} of ${buf.byteLength}`);
 
@@ -92,6 +93,31 @@ check(
   (n - unmatchedAdmin) / n > 0.9,
   `${(((n - unmatchedAdmin) / n) * 100).toFixed(1)}% placed, ${unmatchedAdmin.toLocaleString()} not`,
 );
+// The registry verdict must be one of the four packed codes, and the counts
+// must agree with stats.json — a silent disagreement between the byte and the
+// panel is exactly the kind of drift that survives a demo and fails an audit.
+{
+  const seen = new Uint32Array(256);
+  for (let i = 0; i < n; i++) seen[rev[i]]++;
+  const bad = [];
+  for (let v = 4; v < 256; v++) if (seen[v]) bad.push(v);
+  check('revenue codes are 0-3', bad.length === 0, bad.length ? `saw ${bad}` : '4 codes');
+  const R = stats.buildings.revenue;
+  if (R) {
+    let agree = true;
+    const diffs = [];
+    for (let v = 0; v <= 3; v++) {
+      const want = R.byCode[String(v)] || 0;
+      if (seen[v] !== want) { agree = false; diffs.push(`${v}: bin ${seen[v]} vs stats ${want}`); }
+    }
+    check('revenue counts match stats.json', agree,
+      agree ? `${seen[3].toLocaleString()} not in roll, ${seen[2].toLocaleString()} mismatch`
+            : diffs.join('; '));
+    check('newUnregistered is 2025-only', R.newUnregistered === (R.byYear['2025']?.['3'] || 0),
+      String(R.newUnregistered));
+  }
+}
+
 check('zone indices resolve', badZone === 0, `${zn.length} zones`);
 
 let badFloors = 0;

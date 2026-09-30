@@ -1,4 +1,6 @@
-import { COLORS, LABELS, ORDER, YEAR_ORDER } from '../constants';
+import {
+  COLORS, LABELS, ORDER, REV, REV_COLORS, REV_LABELS, REV_ORDER, YEAR_ORDER,
+} from '../constants';
 import Bars, { type BarDatum } from './Bars';
 import { areaLevel } from '../lib/filters';
 import { taxFor, type LoadProgress, type RawStats, type Selection } from '../services/dataset';
@@ -106,6 +108,19 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
 
   if (lens === 'revenue') {
     const t = taxFor(tax, filters);
+    /* Read from the selection so the bars narrow with the filters, falling
+     * back to the packed totals before the first summarise has run. */
+    const revSrc: Record<number, number> =
+      selection?.byRev ??
+      Object.fromEntries(
+        Object.entries(b.revenue?.byCode || {}).map(([k, v]) => [Number(k), v as number]),
+      );
+    const revBars: BarDatum[] = REV_ORDER.filter((c) => (revSrc[c] || 0) > 0).map((c) => ({
+      key: String(c),
+      label: REV_LABELS[c],
+      value: revSrc[c] || 0,
+      color: REV_COLORS[c],
+    }));
     /* A parcel carries no predicted use, no detection year and no model score,
      * so only the area filter can narrow this lens. Saying so is better than
      * letting the figures sit unchanged and look broken. */
@@ -125,10 +140,28 @@ export default function LensPanel({ lens, stats, selection, filters, progress }:
           <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
         </div>
 
+        <h4 className="lens-sub">Against the RRA registry</h4>
+
         <div className="stat2grid">
-          <Pending label="Not declared" why="RRA tax register not yet joined" />
-          <Pending label="Use differs from declared" why="Declared use empty on all records" />
+          <Stat
+            label="New since 2023, not in tax roll"
+            value={n(selection?.newUnregistered ?? b.revenue?.newUnregistered)}
+            note="the claim the registry's 2019 start date supports"
+          />
+          <Stat
+            label="In tax roll, use conflicts"
+            value={n(selection?.byRev?.[REV.MISMATCH] ?? b.revenue?.useMismatch)}
+            note="declared use differs from what is standing"
+          />
         </div>
+
+        <Bars title="Registry status" data={revBars} />
+
+        <p className="lens-note">
+          The registry extract runs 2019&ndash;2026. A structure standing in 2023 and
+          absent from it may simply predate it, so only structures new since 2023 are
+          counted as unregistered. The 2023 stock is shown on the map as baseline.
+        </p>
 
         {t.coarserThanAsked && (
           <p className="lens-note">
