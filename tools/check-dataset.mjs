@@ -40,8 +40,9 @@ const zone = new Uint8Array(buf, o, n); o += n;
 const rev = new Uint8Array(buf, o, n); o += n;
 const declared = new Uint8Array(buf, o, n); o += n;
 const verified = new Uint8Array(buf, o, n); o += n;
+const exempt = new Uint8Array(buf, o, n); o += n;
 
-check('magic is SPAB6', magic === 'SPAB6', magic);
+check('magic is SPAB7', magic === 'SPAB7', magic);
 check('record count matches stats.json', n === stats.buildings.total, n.toLocaleString());
 check('all attribute bytes consumed', o === buf.byteLength, `${o} of ${buf.byteLength}`);
 
@@ -146,6 +147,14 @@ check(
     check('verified use conflicts match stats.json', mmVerified === want,
       `${mmVerified.toLocaleString()} of ${(stats.buildings.revenue.useMismatch).toLocaleString()}`);
   }
+}
+
+{
+  let bad = 0, ones = 0;
+  for (let i = 0; i < n; i++) { if (exempt[i] > 1) bad++; if (exempt[i] === 1) ones++; }
+  check('exempt flag is 0 or 1', bad === 0, bad ? `${bad} bad` : `${ones.toLocaleString()} exempt`);
+  const want = stats.buildings.revenue?.exempted;
+  if (want != null) check('exempt count matches stats.json', ones === want, `${ones} vs ${want}`);
 }
 
 check('zone indices resolve', badZone === 0, `${zn.length} zones`);

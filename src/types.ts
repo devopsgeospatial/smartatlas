@@ -25,6 +25,8 @@ export interface BuildingProps {
   declared_use?: string;
   /** An officer has confirmed this structure on the ground. */
   verified?: boolean;
+  /** Statutorily exempt, so never a revenue lead. */
+  exempt?: boolean;
   /** Footprint centroid, so callers never have to unwrap the geometry. */
   lon?: number;
   lat?: number;

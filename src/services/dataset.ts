@@ -257,6 +257,8 @@ export interface Dataset {
   declared: Uint8Array;
   /** 1 where the structure has been ground-confirmed. */
   verified: Uint8Array;
+  /** 1 where the property is statutorily exempt. */
+  exempt: Uint8Array;
   declaredNames: string[];
   /** Footprint outlines: vertex range per structure, deltas from the centroid. */
   ringStart: Uint32Array;
@@ -372,9 +374,9 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
   /* SPAB2 added the administrative unit index and dropped the sector byte it
    * replaces. A cached SPAB1 file against this build would decode into
    * nonsense, so the mismatch is fatal rather than best-effort. */
-  if (magic !== 'SPAB6') {
+  if (magic !== 'SPAB7') {
     throw new Error(
-      `Unexpected dataset format ${magic} — expected SPAB6. Re-run tools/prepare_data.py, ` +
+      `Unexpected dataset format ${magic} — expected SPAB7. Re-run tools/prepare_data.py, ` +
         'or hard-reload if an older dataset is cached.',
     );
   }
@@ -417,6 +419,12 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
    * use conflict carrying this flag is an observation; one without it is an
    * inference, and the revenue view lets the reader choose which to trust. */
   const verified = new Uint8Array(buf, o, n);
+  o += n;
+  /* SPAB7: statutorily exempt, as declared. An exempt structure is never a
+   * revenue lead however it reconciles — sending an officer to a primary
+   * dwelling that turns out to be exempt costs the trip and the credibility
+   * — so it is excluded from the leakage map and its counts entirely. */
+  const exempt = new Uint8Array(buf, o, n);
 
   // Footprint outlines.
   let ringStart = new Uint32Array(n + 1);
@@ -453,6 +461,7 @@ export async function loadDataset(onProgress?: (p: LoadProgress) => void): Promi
     rev,
     declared,
     verified,
+    exempt,
     declaredNames: stats.buildings.declaredNames || [],
     ringStart,
     dx,
@@ -490,6 +499,8 @@ export interface Selection {
   sectorMismatchVerified: Record<string, number>;
   /** Use conflicts on ground-confirmed structures — observed, not inferred. */
   mismatchVerified: number;
+  /** Statutorily exempt, and therefore excluded from every figure above. */
+  exemptCount: number;
   /** Not in the roll AND first seen in 2025 — the defensible leakage figure. */
   newUnregistered: number;
 }
@@ -598,6 +609,7 @@ export function summarise(d: Dataset, filters: Filters): Selection {
    * re-scan of 620,000 records on a click. */
   const sectorMismatchVerified: Record<string, number> = {};
   let mismatchVerified = 0;
+  let exemptCount = 0;
   let newUnregistered = 0;
   ORDER.forEach((c) => (byUse[c] = 0));
   YEAR_ORDER.forEach((y) => (byYear[y] = 0));
@@ -621,6 +633,12 @@ export function summarise(d: Dataset, filters: Filters): Selection {
       const z = d.zoneNames[d.zone[i]];
       if (z) byZone[z] = (byZone[z] || 0) + 1;
       const r = d.rev[i];
+      // Exempt structures are counted nowhere in the revenue figures, so the
+      // panel and the map cannot disagree about what is actionable.
+      if (d.exempt[i] === 1) {
+        exemptCount++;
+        continue;
+      }
       byRev[r] = (byRev[r] || 0) + 1;
       const isNew = y < 255 && YEAR_ORDER[y] === '2025';
       if (isNew) byRev2025[r] = (byRev2025[r] || 0) + 1;
@@ -646,7 +664,7 @@ export function summarise(d: Dataset, filters: Filters): Selection {
   return {
     matches, byUse, byYear, byZone, byRev, byRev2025,
     sectorAbsent, sectorMismatch, sectorMismatchVerified,
-    newUnregistered, mismatchVerified,
+    newUnregistered, mismatchVerified, exemptCount,
   };
 }
 
@@ -690,6 +708,8 @@ export function leakagePoints(
     if (u >= 255 || uAllowed[u] !== 1) continue;
     if (y >= 255 || yAllowed[y] !== 1) continue;
 
+    // Exempt property is not leakage, whatever the registry says about it.
+    if (d.exempt[i] === 1) continue;
     const r = d.rev[i];
     const isNew = YEAR_ORDER[y] === '2025';
     const absent = r === 3 && isNew;
@@ -710,36 +730,32 @@ export function leakagePoints(
 }
 
 /**
- * Built density for the Atlas surface, aggregated to a grid.
+ * Where the city grew, as one point per new structure.
  *
- * WHY A GRID AND NOT THE POINTS
- *     The leakage surface emits one point per structure because there are only
- *     ~39,000 of them. Atlas covers all 620,000, and building that many feature
- *     objects on every filter change would cost more time and memory than the
- *     picture is worth. Bucketing to a ~275 m cell collapses it to a few
- *     thousand weighted points, which a heatmap renders identically — the
- *     kernel is wider than the cell, so nothing visible is lost.
+ * WHY GROWTH AND NOT TOTAL STOCK
+ *     A surface weighted by every structure just draws the outline of Kigali.
+ *     It is a picture the reader already has, it points nowhere, and at city
+ *     scale it is barely distinguishable from the basemap under it. Only
+ *     structures first seen in the 2025 imagery contribute, so the hot spots
+ *     are the places that changed — which is the one thing a map at this zoom
+ *     can say that the panel cannot.
  *
- * The weight is the count in the cell, so unticking 2023 in the rail turns the
- * surface from "where the city is" into "where the city is arriving" without
- * any extra code.
+ * WHY NOT A GRID
+ *     It was a grid first. Bucketing to ~275 m smeared exactly the clustering
+ *     the surface exists to show: every cell holding two or three new houses
+ *     lit up faintly, the built-up area went uniformly pale, and nothing
+ *     stood out. 60,212 points is the same order as the leakage surface
+ *     already carries, so the aggregation bought nothing and cost the signal.
  */
-export function densityGrid(d: Dataset, f: Filters): GeoJSON.FeatureCollection {
+export function growthPoints(
+  d: Dataset,
+  f: Filters,
+): { fc: GeoJSON.FeatureCollection; total: number } {
   const uAllowed = useMask(d, f);
   const yAllowed = yearMask(d, f);
   const inArea = areaTest(d, f);
   const minScore = Math.round(f.minScore * 254);
-
-  // ~0.0025 degrees is about 275 m at this latitude.
-  const CELL = 0.0025;
-  const counts = new Map<number, number>();
-  /* The two axes pack into one integer so the map stays primitive-keyed.
-   * Latitude is NEGATIVE here — Kigali sits at about -1.94 — so the row index
-   * is biased into positive territory before packing. Without the bias the
-   * unpacking floor() rounds the wrong way and every cell lands in the wrong
-   * place, which looks plausible on screen and is completely wrong. */
-  const BIAS = 32768;
-  const key = (gx: number, gy: number) => gx * 65536 + (gy + BIAS);
+  const features: GeoJSON.Feature[] = [];
 
   for (let i = 0; i < d.n; i++) {
     if (inArea && !inArea(i)) continue;
@@ -748,23 +764,15 @@ export function densityGrid(d: Dataset, f: Filters): GeoJSON.FeatureCollection {
     const y = d.year[i];
     if (u >= 255 || uAllowed[u] !== 1) continue;
     if (y >= 255 || yAllowed[y] !== 1) continue;
-    const gx = Math.round(d.lon[i] / CELL);
-    const gy = Math.round(d.lat[i] / CELL);
-    const k = key(gx, gy);
-    counts.set(k, (counts.get(k) || 0) + 1);
-  }
-
-  const features: GeoJSON.Feature[] = [];
-  for (const [k, n] of counts) {
-    const gx = Math.floor(k / 65536);
-    const gy = k - gx * 65536 - BIAS;
+    // Growth only. The 2023 stock is the baseline this is read against.
+    if (YEAR_ORDER[y] !== '2025') continue;
     features.push({
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [gx * CELL, gy * CELL] },
-      properties: { w: n },
+      geometry: { type: 'Point', coordinates: [d.lon[i], d.lat[i]] },
+      properties: {},
     });
   }
-  return { type: 'FeatureCollection', features };
+  return { fc: { type: 'FeatureCollection', features }, total: features.length };
 }
 
 /* ---- viewport ------------------------------------------------------------ */
@@ -827,6 +835,7 @@ function toFeature(d: Dataset, i: number): BFeature {
       rev: d.rev[i],
       declared_use: d.declaredNames[d.declared[i]] || undefined,
       verified: d.verified[i] === 1,
+      exempt: d.exempt[i] === 1,
     },
   };
 }

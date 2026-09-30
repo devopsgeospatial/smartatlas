@@ -292,6 +292,10 @@ def build_buildings(admin_index, upi_units):
     # revenue view lets a reader keep the two apart — so the flag has to
     # travel with every structure, not just be counted in the totals.
     verified = []
+    # Statutory exemption, as declared to RRA. An exempt structure is not a
+    # revenue lead however it reconciles, so it is excluded from the leakage
+    # map and its counts rather than being coloured and then explained away.
+    exempt = []
     # Footprint outlines: Int16 deltas from the centroid at 1e-6 degrees
     # (about 0.11 m), which is far finer than the footprints themselves.
     gx = array.array("h")
@@ -402,6 +406,8 @@ def build_buildings(admin_index, upi_units):
 
         conf = is_confirmed(p.get("Ground-Confirmed"))
         verified.append(1 if conf else 0)
+        exm = str(p.get("exempted") or "").strip().lower() in AFFIRMATIVE
+        exempt.append(1 if exm else 0)
 
         rev = revenue_code(p)
         revs.append(rev)
@@ -411,7 +417,7 @@ def build_buildings(admin_index, upi_units):
         by_rev_year[year][rev] += 1
         by_rev_district[(p.get("District") or "").strip()][rev] += 1
         by_rev_sector[sec][rev] += 1
-        if str(p.get("exempted") or "").strip().lower() in AFFIRMATIVE:
+        if exm:
             exempted += 1
 
         by_use[use] += 1
@@ -445,7 +451,7 @@ def build_buildings(admin_index, upi_units):
 
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "buildings.bin"), "wb") as f:
-        f.write(b"SPAB6")
+        f.write(b"SPAB7")
         f.write(struct.pack("<I", n))
         f.write(struct.pack(f"<{n}f", *lons))
         f.write(struct.pack(f"<{n}f", *lats))
@@ -464,6 +470,8 @@ def build_buildings(admin_index, upi_units):
         f.write(bytes(declared_idx))
         # SPAB6 adds the ground-confirmation flag.
         f.write(bytes(verified))
+        # SPAB7 adds the statutory-exemption flag.
+        f.write(bytes(exempt))
 
     goff.append(len(gx))  # terminating offset
     with open(os.path.join(OUT, "geometry.bin"), "wb") as f:

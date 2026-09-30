@@ -8,7 +8,7 @@ import {
 } from '../constants';
 import { copyText } from '../lib/clipboard';
 import { formatCoords } from '../lib/search';
-import { densityGrid, leakagePoints, queryViewport, type Dataset } from '../services/dataset';
+import { growthPoints, leakagePoints, queryViewport, type Dataset } from '../services/dataset';
 import { CITY_BBOX } from '../sectors';
 import type { BBox, BFeature, Basemap, CameraState, Filters, LensId } from '../types';
 
@@ -109,13 +109,17 @@ export default function MapView(props: Props) {
     if (propsRef.current.lens === 'revenue') {
       const isNew = ['==', ['get', 'acquisition_date'], '2025'];
       const rev = ['to-number', ['get', 'rev'], -1];
+      const notExempt = ['!=', ['get', 'exempt'], true];
       const conflict: any[] = propsRef.current.verifiedOnly
         ? ['all', ['==', rev, REV.MISMATCH], ['==', ['get', 'verified'], true]]
         : ['==', rev, REV.MISMATCH];
+      /* Exempt property drops to baseline before anything else is asked. A
+       * primary dwelling is not a lead however it reconciles, and colouring
+       * it costs an officer the trip. */
       return [
         'case',
-        ['all', ['==', rev, REV.ABSENT], isNew], REV_COLORS[REV.ABSENT],
-        conflict, REV_COLORS[REV.MISMATCH],
+        ['all', notExempt, ['==', rev, REV.ABSENT], isNew], REV_COLORS[REV.ABSENT],
+        ['all', notExempt, conflict], REV_COLORS[REV.MISMATCH],
         BASELINE_COLOR,
       ];
     }
@@ -157,7 +161,7 @@ export default function MapView(props: Props) {
         leak != null
           ? `${leak.toLocaleString()} to act on · zoom in for detail`
           : dens != null
-            ? `${dens.toLocaleString()} structures · zoom in for detail`
+            ? `${dens.toLocaleString()} new since 2023 · zoom in for detail`
             : 'Zoom in to see structures',
       );
       propsRef.current.onFeatures([]);
@@ -496,11 +500,14 @@ export default function MapView(props: Props) {
         },
       });
 
-      /* Atlas gets its own surface: built density, not leakage. Same zoom
-       * band and the same handover, but a neutral single-hue ramp — this one
-       * answers "where is the city" and must not borrow the warning colours
-       * the revenue view earns. Weighted by the count in each grid cell, so
-       * unticking 2023 turns it into a map of where the city is arriving. */
+      /* Atlas gets its own surface: where the city GREW. Same zoom band and
+       * the same handover, but a neutral single-hue ramp — this one is not a
+       * warning and must not borrow the revenue colours.
+       *
+       * Weighted on structures first seen in 2025 only. Weighting it by every
+       * building drew the outline of Kigali, which the reader already has and
+       * which points nowhere; weighting it by what changed tells them where
+       * to zoom, which is the whole job of a map at this scale. */
       map.addSource('density', { type: 'geojson', data: EMPTY as any });
       map.addLayer({
         id: 'density-heat',
@@ -509,17 +516,24 @@ export default function MapView(props: Props) {
         maxzoom: 15,
         layout: { visibility: 'none' },
         paint: {
-          'heatmap-weight': ['interpolate', ['linear'], ['get', 'w'], 0, 0, 120, 1],
-          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 4, 11, 8, 13, 18, 14.5, 36],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 0.5, 13, 0.9, 14.5, 1],
+          /* One point per new structure, and the same tight kernel the
+           * leakage surface uses — anything more generous saturates and the
+           * clustering disappears. */
+          'heatmap-weight': 1,
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 2, 11, 4, 13, 12, 14.5, 28],
+          /* Lower than the leakage surface: there are 60,212 of these
+           * against 38,762, so the same intensity blew the top of the ramp
+           * out and most of the built-up area went white. The bright end is
+           * also pushed late, so only genuine concentrations reach it. */
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 0.14, 11, 0.24, 13, 0.6, 14.5, 0.85],
           'heatmap-color': [
             'interpolate', ['linear'], ['heatmap-density'],
             0, 'rgba(0,0,0,0)',
-            0.2, 'rgba(30,90,96,0.35)',
-            0.45, 'rgba(46,140,138,0.55)',
-            0.7, 'rgba(94,196,188,0.7)',
-            0.88, 'rgba(168,232,214,0.82)',
-            1, 'rgba(232,250,240,0.9)',
+            0.25, 'rgba(24,84,92,0.34)',
+            0.55, 'rgba(38,142,140,0.55)',
+            0.78, 'rgba(84,198,184,0.72)',
+            0.93, 'rgba(158,232,208,0.85)',
+            1, 'rgba(226,252,240,0.93)',
           ],
           'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.8, 13.6, 0.8, 15, 0],
         },
@@ -682,12 +696,9 @@ export default function MapView(props: Props) {
       const dsrc = map.getSource('density') as GeoJSONSource | undefined;
       if (dsrc) {
         if (dens && d) {
-          const g = densityGrid(d, props.filters);
-          densCountRef.current = g.features.reduce(
-            (s, ft) => s + ((ft.properties as any)?.w || 0),
-            0,
-          );
-          dsrc.setData(g as any);
+          const g = growthPoints(d, props.filters);
+          densCountRef.current = g.total;
+          dsrc.setData(g.fc as any);
         } else {
           densCountRef.current = null;
           dsrc.setData(EMPTY as any);
@@ -823,15 +834,15 @@ export default function MapView(props: Props) {
         * above the handover the building colours have the filter rail as
         * their legend and a second one here would be noise. */}
       {props.lens === 'atlas' && heatMode && (
-        <div className="revlegend" aria-label="Built density">
-          <div className="revlegend-title">Built density</div>
+        <div className="revlegend" aria-label="Where the city grew">
+          <div className="revlegend-title">Where the city grew</div>
           <div className="revlegend-ramp revlegend-ramp-density" aria-hidden="true" />
           <div className="revlegend-scale">
             <span>sparse</span>
             <span>dense</span>
           </div>
           <div className="revlegend-row revlegend-what">
-            <span>Structures matching the filters</span>
+            <span>Structures first seen in 2025</span>
           </div>
         </div>
       )}
