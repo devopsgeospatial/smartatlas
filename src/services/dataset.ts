@@ -650,6 +650,65 @@ export function summarise(d: Dataset, filters: Filters): Selection {
   };
 }
 
+/* ---- leakage surface ----------------------------------------------------- */
+
+/**
+ * Every structure an assessor could act on, as bare points for the heatmap.
+ *
+ * WHY A SEPARATE PASS
+ *     The structures source is viewport-limited and only populated above
+ *     CONFIG.pointZoom, because drawing 620,000 polygons at city scale would
+ *     be both unreadable and slow. But city scale is exactly where the
+ *     question "where is the leakage" gets asked, so the heatmap needs the
+ *     whole city at once. Points carry no geometry beyond a centroid, so the
+ *     ~39,000 that qualify cost far less than the polygons would.
+ *
+ * WHAT COUNTS
+ *     The same two findings the panel leads on, and nothing else: absent from
+ *     the roll AND new since 2023, or a use conflict. Reconciled structures
+ *     and those with no UPI contribute nothing — a heatmap that warmed up
+ *     wherever buildings are dense would just be a population map.
+ *
+ * The filters apply, so narrowing to a district heats only that district.
+ */
+export function leakagePoints(
+  d: Dataset,
+  f: Filters,
+  verifiedOnly: boolean,
+): GeoJSON.FeatureCollection {
+  const uAllowed = useMask(d, f);
+  const yAllowed = yearMask(d, f);
+  const inArea = areaTest(d, f);
+  const minScore = Math.round(f.minScore * 254);
+  const features: GeoJSON.Feature[] = [];
+
+  for (let i = 0; i < d.n; i++) {
+    if (inArea && !inArea(i)) continue;
+    if (minScore > 0 && d.score[i] !== 255 && d.score[i] < minScore) continue;
+    const u = d.use[i];
+    const y = d.year[i];
+    if (u >= 255 || uAllowed[u] !== 1) continue;
+    if (y >= 255 || yAllowed[y] !== 1) continue;
+
+    const r = d.rev[i];
+    const isNew = YEAR_ORDER[y] === '2025';
+    const absent = r === 3 && isNew;
+    const conflict = r === 2 && (!verifiedOnly || d.verified[i] === 1);
+    if (!absent && !conflict) continue;
+
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [d.lon[i], d.lat[i]] },
+      /* Off-roll weighs more than a use conflict: it is a structure paying
+       * nothing at all, where a conflict is a structure paying the wrong
+       * amount. The ratio is a judgement, not a measurement, so it is stated
+       * here in one place rather than buried in a paint expression. */
+      properties: { w: absent ? 1 : 0.6 },
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
 /* ---- viewport ------------------------------------------------------------ */
 
 export interface Bounds {

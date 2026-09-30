@@ -8,7 +8,7 @@ import {
 } from '../constants';
 import { copyText } from '../lib/clipboard';
 import { formatCoords } from '../lib/search';
-import { queryViewport, type Dataset } from '../services/dataset';
+import { leakagePoints, queryViewport, type Dataset } from '../services/dataset';
 import { CITY_BBOX } from '../sectors';
 import type { BBox, BFeature, Basemap, CameraState, Filters, LensId } from '../types';
 
@@ -63,12 +63,23 @@ export default function MapView(props: Props) {
   const holder = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const readyRef = useRef(false);
+  /* readyRef is a ref because the draw path reads it synchronously, but an
+   * effect cannot depend on a ref. This mirrors it as state so the layers
+   * that are populated once, rather than on every pan, fire when the style
+   * finishes loading. */
+  const [ready, setReady] = useState(false);
+  /** How many structures the leakage surface is drawing, for the status chip. */
+  const leakCountRef = useRef<number | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
   const propsRef = useRef(props);
   propsRef.current = props;
 
   const [basemap, setBasemap] = useState<Basemap>('imagery');
   const [status, setStatus] = useState<string>('Zoom in to see structures');
+  /* Below the structure threshold the heatmap is what the map is showing, so
+   * the legend has to describe that instead of building colours nobody can
+   * see. Tracked as state because the legend is React, not a paint property. */
+  const [heatMode, setHeatMode] = useState(true);
 
   /**
    * How the structures are coloured, which depends on the lens.
@@ -135,7 +146,14 @@ export default function MapView(props: Props) {
     }
     if (map.getZoom() < CONFIG.pointZoom) {
       (map.getSource('structures') as GeoJSONSource | undefined)?.setData(EMPTY as any);
-      setStatus('Zoom in to see structures');
+      /* On the revenue lens the heatmap IS the answer at this zoom, so the
+       * chip should say what it is showing rather than ask to be zoomed. */
+      const leak = propsRef.current.lens === 'revenue' ? leakCountRef.current : null;
+      setStatus(
+        leak != null
+          ? `${leak.toLocaleString()} to act on · zoom in for detail`
+          : 'Zoom in to see structures',
+      );
       propsRef.current.onFeatures([]);
       return;
     }
@@ -429,6 +447,49 @@ export default function MapView(props: Props) {
         },
       });
 
+      /* ---- the leakage surface ------------------------------------------
+       * Answers the city-scale question the polygons cannot: not "is this
+       * building on the roll" but "where is the leakage". It occupies exactly
+       * the zoom range where structures are not drawn, and fades out as they
+       * take over, so the two never compete for the same ground.
+       *
+       * The ramp runs transparent -> teal -> amber -> red. Teal at the cold
+       * end is deliberate: a sparse scatter of off-roll structures is normal
+       * everywhere in the city, and rendering it in warning colours would
+       * make the whole map look like a problem. Only genuine concentrations
+       * reach amber and red. */
+      map.addSource('leak', { type: 'geojson', data: EMPTY as any });
+      map.addLayer({
+        id: 'leak-heat',
+        type: 'heatmap',
+        source: 'leak',
+        maxzoom: 15,
+        layout: { visibility: 'none' },
+        paint: {
+          'heatmap-weight': ['get', 'w'],
+          // Radius grows with zoom so a cluster stays the same size on the
+          // ground rather than dissolving as the map scales.
+          /* Radius and intensity are deliberately small. 38,793 points over
+           * 730 km2 will saturate any generous kernel at city zoom — the
+           * first attempt painted the whole city one flat yellow, which says
+           * nothing. Kept tight, only real concentrations reach the warm end
+           * and the peri-urban belt separates from the core. */
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 9, 2, 11, 4, 13, 12, 14.5, 28],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 9, 0.25, 11, 0.4, 13, 0.8, 14.5, 1],
+          'heatmap-color': [
+            'interpolate', ['linear'], ['heatmap-density'],
+            0, 'rgba(0,0,0,0)',
+            0.2, 'rgba(62,125,110,0.35)',
+            0.45, 'rgba(132,168,86,0.55)',
+            0.68, 'rgba(232,145,60,0.72)',
+            0.86, 'rgba(216,69,47,0.85)',
+            1, 'rgba(255,224,130,0.95)',
+          ],
+          // Gone by the time the structures are legible; they answer from here.
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 9, 0.85, 13.6, 0.85, 15, 0],
+        },
+      });
+
       map.addSource('structures', { type: 'geojson', data: EMPTY as any });
 
       /* The class colour is carried by the outline, not the fill, so the roof
@@ -542,6 +603,7 @@ export default function MapView(props: Props) {
       }
 
       readyRef.current = true;
+      setReady(true);
       repaint();
       schedule();
     });
@@ -551,6 +613,7 @@ export default function MapView(props: Props) {
       map.remove();
       mapRef.current = null;
       readyRef.current = false;
+      setReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -565,6 +628,42 @@ export default function MapView(props: Props) {
     props.filters.years.join(','),
     props.filters.sector,
     props.filters.minScore,
+  ]);
+
+  /* The leakage surface is rebuilt only when its inputs change, never on pan
+   * or zoom: it covers the whole city at once, so the camera is irrelevant to
+   * it. One pass over the dataset, a few milliseconds, and the heatmap then
+   * costs nothing to move around. */
+  useEffect(() => {
+    const map = mapRef.current;
+    const d = props.dataset;
+    if (!map || !readyRef.current || !map.getLayer('leak-heat')) return;
+    const on = props.lens === 'revenue';
+    map.setLayoutProperty('leak-heat', 'visibility', on ? 'visible' : 'none');
+    const src = map.getSource('leak') as GeoJSONSource | undefined;
+    if (!src) return;
+    if (!on || !d) {
+      leakCountRef.current = null;
+      src.setData(EMPTY as any);
+      return;
+    }
+    const fc = leakagePoints(d, props.filters, props.verifiedOnly);
+    leakCountRef.current = fc.features.length;
+    src.setData(fc as any);
+    schedule();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    props.dataset,
+    props.lens,
+    props.verifiedOnly,
+    props.filters.uses.join(','),
+    props.filters.years.join(','),
+    props.filters.district,
+    props.filters.sector,
+    props.filters.cell,
+    props.filters.village,
+    props.filters.minScore,
+    ready,
   ]);
 
   /* Switching lens only changes how the same structures are coloured, so this
@@ -631,20 +730,38 @@ export default function MapView(props: Props) {
       {props.lens === 'revenue' && (
         <div className="revlegend" aria-label="Revenue leakage">
           <div className="revlegend-title">Potential revenue leakage</div>
-          <div className="revlegend-row">
-            <span className="revlegend-dot" style={{ background: REV_COLORS[REV.ABSENT] }} />
-            <span>Built since 2023, not on roll</span>
-          </div>
-          <div className="revlegend-row">
-            <span className="revlegend-dot" style={{ background: REV_COLORS[REV.MISMATCH] }} />
-            <span>
-              On roll, use conflicts{props.verifiedOnly ? ' (verified)' : ''}
-            </span>
-          </div>
-          <div className="revlegend-row">
-            <span className="revlegend-dot" style={{ background: BASELINE_COLOR }} />
-            <span>Baseline</span>
-          </div>
+          {heatMode ? (
+            <>
+              <div className="revlegend-ramp" aria-hidden="true" />
+              <div className="revlegend-scale">
+                <span>scattered</span>
+                <span>concentrated</span>
+              </div>
+              <div className="revlegend-row revlegend-what">
+                <span>Structures to act on, per area</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="revlegend-row">
+                <span className="revlegend-dot" style={{ background: REV_COLORS[REV.ABSENT] }} />
+                <span>Built since 2023, not on roll</span>
+              </div>
+              <div className="revlegend-row">
+                <span
+                  className="revlegend-dot"
+                  style={{ background: REV_COLORS[REV.MISMATCH] }}
+                />
+                <span>
+                  On roll, use conflicts{props.verifiedOnly ? ' (verified)' : ''}
+                </span>
+              </div>
+              <div className="revlegend-row">
+                <span className="revlegend-dot" style={{ background: BASELINE_COLOR }} />
+                <span>Baseline</span>
+              </div>
+            </>
+          )}
         </div>
       )}
       <div className="mapchip bl" aria-live="polite">

@@ -1320,3 +1320,35 @@ button {
 }
 .toggle:hover { color: var(--tx-1); }
 .toggle[aria-checked="true"] { color: var(--tx-1); }
+
+/* The heatmap's own key: a strip of the same ramp the layer paints, with the
+ * two ends named. No numbers, because heatmap density is relative to the
+ * view and a figure here would imply a precision the surface does not have. */
+.revlegend-ramp {
+  height: 8px;
+  border-radius: 2px;
+  margin: 2px 0 4px;
+  background: linear-gradient(
+    to right,
+    rgba(62, 125, 110, 0.35),
+    rgba(132, 168, 86, 0.55),
+    rgba(232, 145, 60, 0.72),
+    rgba(216, 69, 47, 0.85),
+    rgba(255, 224, 130, 0.95)
+  );
+}
+.revlegend-scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tx-3);
+}
+.revlegend-what {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line-2);
+  color: var(--tx-2);
+}
