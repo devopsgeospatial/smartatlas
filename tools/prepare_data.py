@@ -411,14 +411,21 @@ def build_buildings(admin_index, upi_units):
 
         rev = revenue_code(p)
         revs.append(rev)
-        by_rev[rev] += 1
-        if conf:
-            by_rev_verified[rev] += 1
-        by_rev_year[year][rev] += 1
-        by_rev_district[(p.get("District") or "").strip()][rev] += 1
-        by_rev_sector[sec][rev] += 1
         if exm:
             exempted += 1
+        # The revenue aggregates must match what the browser recomputes in
+        # summarise() exactly, because the panel shows these totals until the
+        # first filter pass replaces them. Any disagreement makes a headline
+        # figure change on screen with nobody touching anything, which in a
+        # demo reads as a bug. summarise() skips exempt property and anything
+        # outside the use and year taxonomies, so this skips the same three.
+        if not exm and use in USE_INDEX and year in YEAR_INDEX:
+            by_rev[rev] += 1
+            if conf:
+                by_rev_verified[rev] += 1
+            by_rev_year[year][rev] += 1
+            by_rev_district[(p.get("District") or "").strip()][rev] += 1
+            by_rev_sector[sec][rev] += 1
 
         by_use[use] += 1
         by_year[year] += 1

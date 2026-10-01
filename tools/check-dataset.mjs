@@ -100,10 +100,21 @@ check(
 // must agree with stats.json — a silent disagreement between the byte and the
 // panel is exactly the kind of drift that survives a demo and fails an audit.
 {
+  /* Two tallies. `all` is every record, which is what proves the byte only
+   * ever holds 0-3. `seen` applies the same three exclusions the browser's
+   * summarise() and prepare_data's aggregates both apply — exempt property,
+   * and anything outside the use or year taxonomies — because that is what
+   * the stats.json revenue block now counts. Comparing the raw tally against
+   * it would fail for a reason that is not a bug. */
+  const all = new Uint32Array(256);
   const seen = new Uint32Array(256);
-  for (let i = 0; i < n; i++) seen[rev[i]]++;
+  for (let i = 0; i < n; i++) {
+    all[rev[i]]++;
+    if (exempt[i] === 1 || use[i] >= 255 || year[i] >= 255) continue;
+    seen[rev[i]]++;
+  }
   const bad = [];
-  for (let v = 4; v < 256; v++) if (seen[v]) bad.push(v);
+  for (let v = 4; v < 256; v++) if (all[v]) bad.push(v);
   check('revenue codes are 0-3', bad.length === 0, bad.length ? `saw ${bad}` : '4 codes');
   const R = stats.buildings.revenue;
   if (R) {
@@ -113,7 +124,7 @@ check(
       const want = R.byCode[String(v)] || 0;
       if (seen[v] !== want) { agree = false; diffs.push(`${v}: bin ${seen[v]} vs stats ${want}`); }
     }
-    check('revenue counts match stats.json', agree,
+    check('revenue counts match stats.json (exempt and off-taxonomy excluded)', agree,
       agree ? `${seen[3].toLocaleString()} not in roll, ${seen[2].toLocaleString()} mismatch`
             : diffs.join('; '));
     check('newUnregistered is 2025-only', R.newUnregistered === (R.byYear['2025']?.['3'] || 0),
