@@ -1,5 +1,5 @@
 import {
-  COLORS, LABELS, ORDER, REV, REV_COLORS, REV_LABELS, REV_ORDER, YEAR_ORDER,
+  COLORS, LABELS, ORDER, REV, REV_COLORS, YEAR_ORDER,
 } from '../constants';
 import Bars, { type BarDatum } from './Bars';
 import { areaLevel } from '../lib/filters';
@@ -140,12 +140,37 @@ export default function LensPanel({
           v as number,
         ]),
       );
-    const revBars: BarDatum[] = REV_ORDER.filter((c) => (revSrc[c] || 0) > 0).map((c) => ({
-      key: String(c),
-      label: REV_LABELS[c],
-      value: revSrc[c] || 0,
-      color: REV_COLORS[c],
-    }));
+    /* A three-way split of the 2025 cohort: on the roll, off it, or unknown.
+     *
+     * Conflicts used to be a fourth bar here, and it read as a contradiction.
+     * The bar counted conflicts among structures built since 2023 (6,040)
+     * while the tile above counted ground-verified conflicts across every
+     * cohort (8,345) — different bases, and nothing on screen said so, so a
+     * "verified" subset appeared larger than the total it came from. The
+     * conflict story now lives only in its own tile and sector chart, where
+     * one base governs, and this chart answers the one question its title
+     * asks: is new construction on the register?
+     */
+    const rollBars: BarDatum[] = [
+      {
+        key: 'absent',
+        label: 'Not in tax roll',
+        value: revSrc[REV.ABSENT] || 0,
+        color: REV_COLORS[REV.ABSENT],
+      },
+      {
+        key: 'onroll',
+        label: 'In tax roll',
+        value: (revSrc[REV.MATCH] || 0) + (revSrc[REV.MISMATCH] || 0),
+        color: REV_COLORS[REV.MATCH],
+      },
+      {
+        key: 'noupi',
+        label: 'No UPI — not checked',
+        value: revSrc[REV.NONE] || 0,
+        color: REV_COLORS[REV.NONE],
+      },
+    ].filter((d) => d.value > 0);
 
     /* A conflict an officer has stood in front of is an observation; one the
      * classifier inferred is a lead. Both counts are already computed, so the
@@ -187,7 +212,9 @@ export default function LensPanel({
             value={n(selection?.newUnregistered ?? b.revenue?.newUnregistered)}
           />
           <Stat
-            label={verifiedOnly ? 'Use conflicts, ground-verified' : 'Use conflicts'}
+            label={
+              verifiedOnly ? 'Verified use conflicts, all years' : 'Use conflicts, all years'
+            }
             value={n(conflicts)}
           />
         </div>
@@ -211,7 +238,7 @@ export default function LensPanel({
           <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
         </div>
 
-        <Bars title="Registry status — built since 2023" data={revBars} />
+        <Bars title="Registry status — built since 2023" data={rollBars} />
 
         <Bars
           title="Not in tax roll — top sectors"
