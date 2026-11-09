@@ -475,6 +475,17 @@ def main():
         # water zones. Reproduces the Pilot Report's figure exactly.
         "undesignatedNew": int(np.isin(zone_in, ids).sum()),
         "undevelopedHa": round(float(L.stats["tax"]["vacantSqm"]) / 10000),
+        # The registry comparison, exactly as the Revenue lens computes it.
+        # notOnRoll counts the 2025 cohort only, because the RRA extract starts
+        # in 2019 and absence says nothing about older stock. It is an upper
+        # bound while the exemption register is missing: the exempt flag is set
+        # on 32 of 620,170 records, so exempt property cannot yet be removed.
+        "registry": {
+            "notOnRoll": int(L.stats["buildings"]["revenue"]["newUnregistered"]),
+            "conflictsVerified": int(L.stats["buildings"]["revenue"]["useMismatchVerified"]),
+            "conflictsAll": int(L.stats["buildings"]["revenue"]["useMismatch"]),
+            "exemptFlagged": int(L.stats["buildings"]["revenue"]["exempted"]),
+        },
         "proof": {
             "place": place,
             "newInFrame": outlined,

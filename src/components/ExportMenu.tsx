@@ -19,10 +19,14 @@ interface Props {
   selection: Selection | null;
   features: BFeature[];
   onDone: (message: string, mono?: string) => void;
+  /** Open on arrival, for a link that exists to hand over the worklist. */
+  openOnMount?: boolean;
 }
 
-export default function ExportMenu({ lens, filters, stats, selection, features, onDone }: Props) {
-  const [open, setOpen] = useState(false);
+export default function ExportMenu({
+  lens, filters, stats, selection, features, onDone, openOnMount = false,
+}: Props) {
+  const [open, setOpen] = useState(openOnMount);
   const [fallback, setFallback] = useState<{
     kind: FallbackKind;
     payload: string;

@@ -44,5 +44,11 @@
     "totalInFrame": 514,
     "before": "2023-12-07",
     "after": "2025-12-18"
+  },
+  "registry": {
+    "notOnRoll": 30417,
+    "conflictsVerified": 8345,
+    "conflictsAll": 87408,
+    "exemptFlagged": 32
   }
 }

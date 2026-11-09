@@ -38,6 +38,12 @@ interface LandingShape {
   exampleUpi: string;
   undesignatedNew: number;
   undevelopedHa: number;
+  registry: {
+    notOnRoll: number;
+    conflictsVerified: number;
+    conflictsAll: number;
+    exemptFlagged: number;
+  };
   attributes: { withHeight: number; fourStoreysPlus: number; tallestStoreys: number };
   logos: { name: string; file: string; w: number; h: number; mono: boolean }[];
   proof: {
@@ -117,6 +123,18 @@ const STEPS: [string, string][] = [
   ['Footprint extraction', 'A model traces every building, then matches the two captures to find what is new.'],
   ['Use classification', 'A second model reads each footprint and gives it a use class.'],
   ['Field validation', 'Officers confirm structures on the ground, and the confirmation is carried on the record.'],
+];
+
+/* Field assessment opens the Atlas over a dense frame with the export menu
+ * already down. It cannot open on the whole city: Export reads the structures
+ * in the viewport, and the button is disabled until they are loaded, so a
+ * citywide link would hand someone a dead control. */
+const FIELD_VIEW = '-1.93951,30.07688,16';
+
+const SIDE_DOORS: [string, string][] = [
+  ['Revenue', `lens=revenue&at=${CITY_VIEW}`],
+  ['Compliance', `lens=compliance&at=${CITY_VIEW}`],
+  ['Field assessment', `lens=atlas&at=${FIELD_VIEW}&export=1`],
 ];
 
 const CARRIES = [
@@ -212,19 +230,6 @@ export default function Landing() {
             />
           </div>
 
-          {extra && (
-            <p className="lp-try">
-              <span className="lp-try-label">Try a UPI</span>
-              <button
-                type="button"
-                className="lp-try-upi"
-                onClick={() => open(`upi=${encodeURIComponent(extra.exampleUpi)}`)}
-              >
-                {extra.exampleUpi}
-              </button>
-            </p>
-          )}
-
           <div className="lp-actions">
             <a
               className="lp-cta"
@@ -236,14 +241,14 @@ export default function Landing() {
             >
               Open the Atlas
             </a>
-            {([['Revenue', 'revenue'], ['Compliance', 'compliance']] as const).map(([label, lens]) => (
+            {SIDE_DOORS.map(([label, hash]) => (
               <a
-                key={lens}
+                key={label}
                 className="lp-link"
-                href={`#lens=${lens}&at=${CITY_VIEW}`}
+                href={`#${hash}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  open(`lens=${lens}&at=${CITY_VIEW}`);
+                  open(hash);
                 }}
               >
                 {label}
@@ -350,17 +355,30 @@ export default function Landing() {
           <article className="lp-case">
             <h3 className="lp-case-h">Property taxation</h3>
             <p className="lp-case-p">
-              A tax roll can only be as complete as the picture of what is standing. SPARC gives
-              the revenue authority a building level record to set against its own: what sits on
-              each parcel, what it is being used for, and when it first appeared. That is a
-              worklist, not an assessment. The layer says where to look, and what a property is
-              worth stays with the authority.
+              Every structure extracted from the imagery carries its parcel identifier, so the
+              record can be set beside the tax roll, parcel by parcel. Two things fall out of
+              that comparison, and they are different kinds of finding.
             </p>
             <p className="lp-case-p">
-              It also sees what is not built.{' '}
-              {extra ? `${nf(extra.undevelopedHa)} hectares` : 'The hectares'} of land already
-              designated for development are standing undeveloped, a base that needs no model at
-              all to act on.
+              <b className="lp-emph">Not on the roll.</b>{' '}
+              {extra ? nf(extra.registry.notOnRoll) : 'Structures'} structures that appeared
+              since the last imagery sit on parcels the roll does not hold. Read it as an upper
+              bound, not a count: exempt property has to come out first, and the exemption flag
+              reaches{' '}
+              {extra ? nf(extra.registry.exemptFlagged) : 'a handful of'} records so far. The
+              number can only fall.
+            </p>
+            <p className="lp-case-p">
+              <b className="lp-emph">Use declared against use observed.</b> Where a parcel is on
+              the roll, what the owner declared can be set against what the imagery sees. The two
+              disagree on {extra ? nf(extra.registry.conflictsAll) : 'many'} parcels, and{' '}
+              {extra ? nf(extra.registry.conflictsVerified) : 'some'} of those sit on structures
+              an officer has already confirmed on the ground. Those are evidence. The rest are
+              leads, and the difference matters.
+            </p>
+            <p className="lp-case-p">
+              Neither figure is a revenue estimate, and the layer does not produce one. It says
+              which properties to go and look at. What they are worth stays with the authority.
             </p>
           </article>
 
@@ -464,9 +482,7 @@ export default function Landing() {
 
       <footer className="lp-footer">
         <p className="lp-disclaimer">
-          The boundaries, colors, denominations, and any other information shown on any map in this
-          work do not imply any judgment on the part of The World Bank concerning the legal status
-          of any territory or the endorsement or acceptance of such boundaries.
+          Dataset of record 1 October 2026. Imagery: Esri World Imagery.
         </p>
       </footer>
     </main>

@@ -27,6 +27,10 @@ const LENSES: { id: LensId; label: string }[] = [
 const readUpi = () =>
   new URLSearchParams(window.location.hash.replace(/^#/, '')).get('upi');
 
+/** A link that exists to hand over a worklist arrives with the menu open. */
+const readExport = () =>
+  new URLSearchParams(window.location.hash.replace(/^#/, '')).get('export') === '1';
+
 /**
  * A single line of progress across the seam under the top bar. Determinate once
  * every data file has declared its size; a slow sweep until then, so the page
@@ -57,6 +61,7 @@ export default function App() {
    * hash on first render and drops every key it does not own, including upi. */
   const [initial] = useState(readUrl);
   const [bootUpi] = useState(readUpi);
+  const [bootExport] = useState(readExport);
 
   const [lens, setLens] = useState<LensId>(initial.lens);
   /* Revenue view only: restrict use conflicts to structures an officer has
@@ -231,6 +236,7 @@ export default function App() {
           selection={selection}
           features={viewFeatures}
           onDone={showToast}
+          openOnMount={bootExport}
         />
 
         <button

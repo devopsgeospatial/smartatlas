@@ -19,7 +19,8 @@ const App = lazy(() => import('./App'));
 
 /** Every key urlState.ts writes, plus the one the landing search hands over. */
 const APP_KEYS = [
-  'lens', 'use', 'year', 'district', 'sector', 'cell', 'village', 'score', 'at', 'sel', 'upi',
+  'lens', 'use', 'year', 'district', 'sector', 'cell', 'village', 'score', 'at', 'sel',
+  'upi', 'export',
 ];
 
 function wantsApp(): boolean {
