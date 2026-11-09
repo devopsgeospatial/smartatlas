@@ -165,7 +165,11 @@ export default function Landing() {
           className="lp-hero-img"
           src={asset('hero-1280.webp')}
           srcSet={`${asset('hero-960.webp')} 960w, ${asset('hero-1280.webp')} 1280w, ${asset('hero-1920.webp')} 1920w`}
-          sizes="100vw"
+          /* Not plain 100vw: at 1366, the commonest projector and laptop width,
+             that picks the 1920 file and spends 168 KB to upscale by 7 percent
+             less. Below 1440 the 1280 file is served instead, which is the
+             difference between clearing the two second budget and missing it. */
+          sizes="(max-width: 1439px) 1280px, 1920px"
           width={1920}
           height={1080}
           fetchPriority="high"
