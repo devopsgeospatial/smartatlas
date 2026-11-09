@@ -451,8 +451,9 @@ def main():
     outlined, diff = proof(L, px, py)
     upi = example_upi(L, hbb)
 
-    print("\npartner marks")
-    logos = make_logos()
+    # make_logos() is kept, and deliberately not called: the partners row was
+    # removed from the page. Call it again and put "logos" back in the payload
+    # to restore it.
 
     in_tax = L.use < 7
     h, f = L.height[in_tax], L.floors[in_tax]
@@ -464,7 +465,6 @@ def main():
     out = {
         "structures": int(in_tax.sum()),
         "exampleUpi": upi,
-        "logos": logos,
         "attributes": {
             "withHeight": int((h > 0).sum()),
             "fourStoreysPlus": int((f >= 4).sum()),

@@ -45,7 +45,6 @@ interface LandingShape {
     exemptFlagged: number;
   };
   attributes: { withHeight: number; fourStoreysPlus: number; tallestStoreys: number };
-  logos: { name: string; file: string; w: number; h: number; mono: boolean }[];
   proof: {
     place: string;
     newInFrame: number;
@@ -397,32 +396,6 @@ export default function Landing() {
         </p>
       </section>
 
-      {/* Marks are sized by the geometric mean of equal ink area and equal
-          height, so a long wordmark does not read larger than a compact one.
-          The World Bank sits as text because the only file available is the
-          globe device without its wordmark, and the globe may not stand alone.
-          tools/make_landing_assets.py does the conversion. */}
-      <section className="lp-partners" aria-labelledby="lp-partners-h">
-        <h2 className="lp-h2" id="lp-partners-h">
-          Partners
-        </h2>
-        <ul className="lp-logos">
-          {(extra?.logos ?? []).map((l) => (
-            <li key={l.file}>
-              <img
-                src={asset(l.file)}
-                width={l.w}
-                height={l.h}
-                loading="lazy"
-                decoding="async"
-                alt={l.name}
-                style={{ height: `${Math.round(l.h / 2.4)}px` }}
-              />
-            </li>
-          ))}
-          <li className="lp-logo-text">World Bank</li>
-        </ul>
-      </section>
     </main>
   );
 }

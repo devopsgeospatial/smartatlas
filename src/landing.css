@@ -271,8 +271,7 @@ body[data-screen='landing'] #root {
 .lp-proof,
 .lp-cases,
 .lp-how,
-.lp-carry,
-.lp-partners {
+.lp-carry {
   max-width: 1440px;
   margin-inline: auto;
   padding: 0 24px;
@@ -443,6 +442,12 @@ body[data-screen='landing'] #root {
   max-width: 70ch;
 }
 
+/* The last section on the page, so it carries the bottom margin that the
+   footer used to provide. */
+.lp-carry {
+  padding-bottom: 72px;
+}
+
 .lp-carry-note {
   font-size: 15px;
   line-height: 1.6;
@@ -478,46 +483,7 @@ body[data-screen='landing'] #root {
   color: var(--tx-2);
 }
 
-/* ---- partners, footer ------------------------------------------------------ */
-
-.lp-partner-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 48px;
-  font-size: 18px;
-  line-height: 1.4;
-  color: var(--tx-1);
-}
-
-/* One row of marks, already normalised to the same optical size by the build
-   script, so the only job here is to space them and keep them on one line. */
-.lp-logos {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 28px 64px;
-  min-height: 72px;
-}
-
-.lp-logos li {
-  display: flex;
-  align-items: center;
-}
-
-/* The partner with no usable mark sits on the same centre line, weighted to
-   read as the same optical size as the marks beside it. */
-.lp-logo-text {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--tx-1);
-}
-
-.lp-logos img {
-  display: block;
-  width: auto;
-  max-width: 100%;
-}
+/* ---- footer ---------------------------------------------------------------- */
 
 .lp-footer {
   max-width: 1440px;
@@ -601,10 +567,15 @@ body[data-screen='landing'] #root {
   .lp-proof,
   .lp-cases,
   .lp-how,
-  .lp-carry,
-  .lp-partners {
+  .lp-carry {
     padding: 0 40px;
     margin-top: 120px;
+  }
+
+  /* Restated: the shorthand above resets the bottom padding this section
+     needs as the last thing on the page. */
+  .lp-carry {
+    padding-bottom: 120px;
   }
 
   /* Two cases side by side, divided by the same hairline the stat band uses. */
