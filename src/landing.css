@@ -301,7 +301,9 @@ body[data-screen='landing'] #root {
 /* ---- shared section furniture --------------------------------------------- */
 
 .lp-proof,
+.lp-cases,
 .lp-how,
+.lp-carry,
 .lp-partners {
   max-width: 1440px;
   margin-inline: auto;
@@ -430,6 +432,85 @@ body[data-screen='landing'] #root {
   margin-top: 8px;
 }
 
+/* ---- the two use cases ----------------------------------------------------- */
+
+.lp-case-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 48px;
+}
+
+.lp-case {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lp-case-h {
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.lp-case-p {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--tx-2);
+  max-width: 62ch;
+}
+
+/* ---- the GeoAI lead -------------------------------------------------------- */
+
+.lp-lead {
+  font-size: clamp(19px, 1.9vw, 24px);
+  line-height: 1.5;
+  color: var(--tx-1);
+  max-width: 50ch;
+  margin-bottom: 48px;
+}
+
+/* ---- what each building carries -------------------------------------------- */
+
+.lp-carry-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
+}
+
+.lp-attrs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  align-content: start;
+}
+
+.lp-attrs li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--tx-1);
+}
+
+.lp-attrs li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+}
+
+.lp-carry-note {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 /* ---- how it works ---------------------------------------------------------- */
 
 .lp-steps {
@@ -466,6 +547,21 @@ body[data-screen='landing'] #root {
   font-size: 18px;
   line-height: 1.4;
   color: var(--tx-1);
+}
+
+/* One row of marks, already normalised to the same optical size by the build
+   script, so the only job here is to space them and keep them on one line. */
+.lp-logos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 32px 56px;
+}
+
+.lp-logos img {
+  display: block;
+  width: auto;
+  max-width: 100%;
 }
 
 .lp-footer {
@@ -545,10 +641,35 @@ body[data-screen='landing'] #root {
   }
 
   .lp-proof,
+  .lp-cases,
   .lp-how,
+  .lp-carry,
   .lp-partners {
     padding: 0 40px;
     margin-top: 120px;
+  }
+
+  /* Two cases side by side, divided by the same hairline the stat band uses. */
+  .lp-case-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+  }
+
+  .lp-case {
+    padding-inline: 40px;
+  }
+
+  .lp-case:first-child {
+    padding-left: 0;
+  }
+
+  .lp-case + .lp-case {
+    border-left: 1px solid var(--line-1);
+  }
+
+  .lp-carry-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 72px;
   }
 
   .lp-footer {

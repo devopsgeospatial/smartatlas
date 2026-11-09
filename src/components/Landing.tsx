@@ -36,6 +36,10 @@ interface StatsShape {
 interface LandingShape {
   structures: number;
   exampleUpi: string;
+  undesignatedNew: number;
+  undevelopedHa: number;
+  attributes: { withHeight: number; fourStoreysPlus: number; tallestStoreys: number };
+  logos: { name: string; file: string; w: number; h: number; mono: boolean }[];
   proof: {
     place: string;
     newInFrame: number;
@@ -109,10 +113,21 @@ function useCountUp(target: number | undefined, ms = 1200) {
 }
 
 const STEPS: [string, string][] = [
-  ['Imagery', 'Very high resolution satellite imagery of the whole city, flown twice.'],
-  ['AI footprint extraction', 'A model traces every building, then the two years are compared to find what is new.'],
-  ['Land use classification', 'Each footprint is given a use class and joined to its parcel and Master Plan zone.'],
+  ['Imagery', '30 cm satellite imagery of the whole city, captured twice so the two years can be compared.'],
+  ['Footprint extraction', 'A model traces every building, then matches the two captures to find what is new.'],
+  ['Use classification', 'A second model reads each footprint and gives it a use class.'],
   ['Field validation', 'Officers confirm structures on the ground, and the confirmation is carried on the record.'],
+];
+
+const CARRIES = [
+  'A use class',
+  'The year it was first seen',
+  'Its parcel identifier',
+  'Its Master Plan zone',
+  'Its footprint area',
+  'An estimated height',
+  'The storey count that follows',
+  'Whether an officer has confirmed it',
 ];
 
 const asset = (f: string) => `${import.meta.env.BASE_URL}${f}`;
@@ -327,10 +342,55 @@ export default function Landing() {
         )}
       </section>
 
+      <section className="lp-cases" aria-labelledby="lp-cases-h">
+        <h2 className="lp-h2" id="lp-cases-h">
+          What it answers
+        </h2>
+        <div className="lp-case-grid">
+          <article className="lp-case">
+            <h3 className="lp-case-h">Property taxation</h3>
+            <p className="lp-case-p">
+              A tax roll can only be as complete as the picture of what is standing. SPARC gives
+              the revenue authority a building level record to set against its own: what sits on
+              each parcel, what it is being used for, and when it first appeared. That is a
+              worklist, not an assessment. The layer says where to look, and what a property is
+              worth stays with the authority.
+            </p>
+            <p className="lp-case-p">
+              It also sees what is not built.{' '}
+              {extra ? `${nf(extra.undevelopedHa)} hectares` : 'The hectares'} of land already
+              designated for development are standing undeveloped, a base that needs no model at
+              all to act on.
+            </p>
+          </article>
+
+          <article className="lp-case">
+            <h3 className="lp-case-h">Compliance monitoring</h3>
+            <p className="lp-case-p">
+              Every structure carries the Master Plan zone of the parcel beneath it, so the plan
+              can be read against what was actually built rather than against what was approved.
+            </p>
+            <p className="lp-case-p">
+              Of the structures that appeared in the later imagery,{' '}
+              {extra ? nf(extra.undesignatedNew) : 'a share'} stand on land the plan does not
+              designate for building at all: farmland, the transport reserve, steep slopes,
+              forest, parks and the water zones. Sorted by sector, that is a list an inspection
+              team can be handed one area at a time.
+            </p>
+          </article>
+        </div>
+      </section>
+
       <section className="lp-how" aria-labelledby="lp-how-h">
         <h2 className="lp-h2" id="lp-how-h">
-          How it works
+          How the layer is made
         </h2>
+        <p className="lp-lead">
+          SPARC is built by GeoAI, not by survey. Models read the imagery and produce the record,
+          and people check it. That is what makes a city of this size affordable to map building
+          by building, and repeatable the next time imagery lands rather than a project that has
+          to be started again.
+        </p>
         <ol className="lp-steps">
           {STEPS.map(([name, line]) => (
             <li className="lp-step" key={name}>
@@ -341,18 +401,65 @@ export default function Landing() {
         </ol>
       </section>
 
-      {/* Partners. No official logo files exist in this repo. A redrawn or
-          approximated institutional mark is not acceptable, so the names stand
-          as text until the real assets are supplied. */}
+      <section className="lp-carry" aria-labelledby="lp-carry-h">
+        <h2 className="lp-h2" id="lp-carry-h">
+          What each building carries
+        </h2>
+        <div className="lp-carry-grid">
+          <ul className="lp-attrs">
+            {CARRIES.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+          <div className="lp-carry-note">
+            <p className="lp-case-p">
+              Height is the attribute that turns a footprint into floor space, and floor space is
+              what a valuation and a density rule both need.
+            </p>
+            <p className="lp-case-p">
+              {extra
+                ? `${nf(extra.attributes.withHeight)} structures carry an estimated height, and ${nf(extra.attributes.fourStoreysPlus)} of those stand four storeys or more. The tallest estimate in the layer is ${extra.attributes.tallestStoreys} storeys.`
+                : 'Structures carry an estimated height, and the storey count follows from it.'}{' '}
+              Where the imagery does not support a height, the record is left blank rather than
+              filled with a guess.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Marks are normalised by ink area, not by height, so a wide wordmark
+          does not read larger than a round seal. Three are knocked down to the
+          one ink colour; the coat of arms keeps its own, because flattening a
+          detailed national emblem to a single colour turns it into a blank
+          disc. tools/make_landing_assets.py does the conversion. */}
       <section className="lp-partners" aria-labelledby="lp-partners-h">
         <h2 className="lp-h2" id="lp-partners-h">
           Partners
         </h2>
-        <ul className="lp-partner-list">
-          <li>National Land Authority</li>
-          <li>City of Kigali</li>
-          <li>World Bank</li>
-        </ul>
+        {extra && extra.logos.length > 0 ? (
+          <ul className="lp-logos">
+            {extra.logos.map((l) => (
+              <li key={l.file}>
+                <img
+                  src={asset(l.file)}
+                  width={l.w}
+                  height={l.h}
+                  loading="lazy"
+                  decoding="async"
+                  alt={l.name}
+                  style={{ height: `${Math.round(l.h / 2.2)}px` }}
+                />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <ul className="lp-partner-list">
+            <li>National Land Authority</li>
+            <li>Republic of Rwanda</li>
+            <li>Rwanda Revenue Authority</li>
+            <li>World Bank</li>
+          </ul>
+        )}
       </section>
 
       <footer className="lp-footer">

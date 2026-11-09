@@ -155,7 +155,9 @@ class Layer:
         o = 9 + n * 8
         self.use = np.frombuffer(raw, np.uint8, n, o)
         self.year = np.frombuffer(raw, np.uint8, n, o + n)
+        self.floors = np.frombuffer(raw, np.uint8, n, o + n * 2)
         self.area = np.frombuffer(raw, "<u2", n, o + n * 4)
+        self.height = np.frombuffer(raw, "<u2", n, o + n * 4 + n * 2)
         self.sector = np.frombuffer(raw, np.uint8, n, o + n * 4 + n * 6)
         self.zone = np.frombuffer(raw, np.uint8, n, o + n * 4 + n * 6 + n)
         self.sector_names = self.stats["buildings"]["sectorNames"]
@@ -344,6 +346,100 @@ def example_upi(L, bb):
     raise SystemExit("no UPI in the hero frame")
 
 
+LOGO_SRC = os.path.join(ROOT, "Logo")
+LOGO_INK = (234, 240, 239)       # #EAF0EF, as the brief sets it
+LOGO_BOX = 190                   # px of ink height to normalise toward
+
+
+def make_logos():
+    """Knock each partner mark down to one colour and one optical size.
+
+    The marks arrive as four different things: PNGs with real alpha and a JPEG
+    on white. The alpha is taken where it exists and derived from darkness
+    where it does not, so a flattened mark does not ship with a white card
+    behind it. Sizing is by ink area rather than by height, because a wide
+    wordmark set to the same height as a round seal reads far larger.
+    """
+    if not os.path.isdir(LOGO_SRC):
+        print("  no Logo folder, partner marks left as text")
+        return []
+
+    found = []
+    for name, file, mono in (
+        ("National Land Authority", "NLA_Logo.png", True),
+        # The coat of arms is a detailed multi-colour emblem. Reducing it to a
+        # single colour turns it into a blank disc, which misrepresents a
+        # national emblem, so it keeps its own colours until an official
+        # one-colour version is supplied.
+        ("Republic of Rwanda", "Rwanda-Gov-logo-(Horizontal).png", False),
+        ("Rwanda Revenue Authority", "Rwanda-Revenue-Authority-logo.png", True),
+        ("World Bank", "WB.jpg", True),
+    ):
+        p = os.path.join(LOGO_SRC, file)
+        if not os.path.isfile(p):
+            print(f"  missing {file}")
+            continue
+        im = Image.open(p)
+        has_alpha = im.mode in ("RGBA", "LA") or "transparency" in im.info
+        rgba = im.convert("RGBA")
+        if has_alpha:
+            a = rgba.split()[3]
+        else:
+            # Flattened on white: ink is whatever is darker than the paper,
+            # stretched so the darkest pixel reaches full opacity. Without the
+            # stretch a mid-grey mark ships at half strength and reads grey
+            # rather than the ink colour it was asked for.
+            g = np.asarray(im.convert("L")).astype(np.float32)
+            v = np.clip(255.0 - g, 0, 255)
+            if v.max() > 0:
+                v *= 255.0 / v.max()
+            a = Image.fromarray(v.astype(np.uint8))
+        arr = np.asarray(a)
+        if arr.max() == 0:
+            print(f"  {file} has no usable ink, skipped")
+            continue
+        ys, xs = np.nonzero(arr > 12)
+        box = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
+        found.append([name, file, a.crop(box), rgba.crop(box), mono,
+                      float((np.asarray(a.crop(box)) / 255.0).sum())])
+
+    if not found:
+        return []
+
+    # Optical size is the geometric mean of two normalisations, because either
+    # one alone misbehaves on a mixed set. Equal height alone makes a long
+    # wordmark tower over a seal. Equal ink area alone inflates a thin outline
+    # drawing, which is how the World Bank globe ended up nearly twice the
+    # height of everything beside it. The mean of the two lands where the eye
+    # expects.
+    target_ink = float(np.median([f[5] for f in found]))
+    target_h = float(np.median([f[2].size[1] for f in found]))
+    ks = [math.sqrt(math.sqrt(target_ink / f[5]) * (target_h / f[2].size[1]))
+          for f in found]
+    tallest = max(f[2].size[1] * k for f, k in zip(found, ks))
+    group = min(1.0, LOGO_BOX / tallest)
+
+    out = []
+    for (name, file, a, rgba, mono, ink), k in zip(found, ks):
+        w, h = a.size
+        w = max(1, round(w * k * group))
+        h = max(1, round(h * k * group))
+        if mono:
+            img = Image.new("RGBA", (w, h), LOGO_INK + (0,))
+            img.putalpha(a.resize((w, h), Image.LANCZOS))
+        else:
+            img = rgba.resize((w, h), Image.LANCZOS)
+        slug = "logo-" + "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
+        while "--" in slug:
+            slug = slug.replace("--", "-")
+        fp = os.path.join(PUB, f"{slug}.webp")
+        img.save(fp, format="WEBP", quality=90, method=6)
+        out.append({"name": name, "file": f"{slug}.webp", "w": w, "h": h, "mono": mono})
+        print(f"  {name:<26}{w}x{h}  {os.path.getsize(fp)/1024:.0f} KB  "
+              f"{'mono' if mono else 'FULL COLOUR, see note'}  from {file}")
+    return out
+
+
 def main():
     L = Layer()
     print("choosing frames")
@@ -355,10 +451,30 @@ def main():
     outlined, diff = proof(L, px, py)
     upi = example_upi(L, hbb)
 
+    print("\npartner marks")
+    logos = make_logos()
+
     in_tax = L.use < 7
+    h, f = L.height[in_tax], L.floors[in_tax]
+    zone_in = L.zone[in_tax & (L.year == 0)]
+    undesignated = [z for z in ("A1", "T", "P1", "P2", "P3B", "P3C",
+                                "W2", "W3", "W4", "W5", "WB") if z in L.zone_names]
+    ids = [L.zone_names.index(z) for z in undesignated]
+
     out = {
         "structures": int(in_tax.sum()),
         "exampleUpi": upi,
+        "logos": logos,
+        "attributes": {
+            "withHeight": int((h > 0).sum()),
+            "fourStoreysPlus": int((f >= 4).sum()),
+            "tallestStoreys": int(f.max()),
+        },
+        # Land the Master Plan does not designate for building at all:
+        # agriculture, the transport reserve, the protected zones and the
+        # water zones. Reproduces the Pilot Report's figure exactly.
+        "undesignatedNew": int(np.isin(zone_in, ids).sum()),
+        "undevelopedHa": round(float(L.stats["tax"]["vacantSqm"]) / 10000),
         "proof": {
             "place": place,
             "newInFrame": outlined,
