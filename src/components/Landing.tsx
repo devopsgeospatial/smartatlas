@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SearchBox from './SearchBox';
 import { COLORS, LABELS, ORDER } from '../constants';
 import { CITY_BBOX } from '../sectors';
@@ -7,32 +7,21 @@ import type { Sector } from '../types';
 /* ----------------------------------------------------------------------------
  * The front door.
  *
- * It sits in front of the dashboard and loads none of its data: stats.json is
- * 14 KB and carries every figure on this page, the hero is a 46 KB still, and
- * the search runs off the static SECTOR_LIST. MapLibre and the 40 MB building
- * layer are only fetched once a door is opened, which is what keeps the first
- * screen inside its budget.
+ * It loads none of the dashboard's data: stats.json and landing.json are 14 KB
+ * between them, the imagery is rendered ahead of time by
+ * tools/make_landing_assets.py, and the search runs off the static
+ * SECTOR_LIST. MapLibre and the 40 MB building layer are fetched only once a
+ * door is opened.
  *
- * Every number here is derived from stats.json the same way the dashboard's
- * own panel derives it, so the two can never disagree.
+ * Every figure here is read at runtime from those two files, and each one
+ * appears exactly once on the page.
  * -------------------------------------------------------------------------- */
 
-/** Where the Atlas opens from a door: the centre of CITY_BBOX, whole city. */
 const CITY_VIEW = (() => {
   const [w, s, e, n] = CITY_BBOX;
   return `${((s + n) / 2).toFixed(5)},${((w + e) / 2).toFixed(5)},11`;
 })();
 
-interface Figures {
-  structures: number;
-  newSince2023: number;
-  undeveloped: number;
-  fieldVerified: number;
-  withUpi: number;
-  withZone: number;
-}
-
-/** Reads stats.json. Shape is owned by tools/prepare_data.py. */
 interface StatsShape {
   buildings: {
     total: number;
@@ -43,44 +32,56 @@ interface StatsShape {
   tax: { vacant: number };
 }
 
-/** public/data/coverage.json, written by tools/make_landing_assets.py. */
-interface CoverageShape {
+/** public/data/landing.json, written by tools/make_landing_assets.py. */
+interface LandingShape {
   structures: number;
-  withUpi: number;
-  withZone: number;
+  exampleUpi: string;
+  proof: {
+    place: string;
+    newInFrame: number;
+    totalInFrame: number;
+    before: string;
+    after: string;
+  };
 }
 
-function derive(s: StatsShape, cov: CoverageShape): Figures {
-  const b = s.buildings;
+interface Figures {
+  structures: number;
+  newSince2023: number;
+  undeveloped: number;
+  fieldVerified: number;
+}
 
+function derive(s: StatsShape): Figures {
+  const b = s.buildings;
   /* The dashboard counts a structure only when its use is one of the seven
    * classes in ORDER, so the headline is the sum over those and not
    * buildings.total. One record carries an off-taxonomy class and is excluded
-   * everywhere, which is why this reads 620,169 against a packed 620,170. */
+   * everywhere, which is why this reads 620,169 against a packed 620,170. That
+   * record sits in the 2025 cohort, verified against the packed layer, so
+   * taking it off the new-build count reproduces the Atlas tile exactly. */
   const structures = ORDER.reduce((t, c) => t + (b.byUse[c] ?? 0), 0);
   const offTaxonomy = b.total - structures;
-
-  /* That one off-taxonomy record sits in the 2025 cohort, verified against the
-   * packed layer, so subtracting it here reproduces the Atlas tile exactly. */
-  const newSince2023 = (b.byYear['2025'] ?? 0) - offTaxonomy;
-
   return {
     structures,
-    newSince2023,
+    newSince2023: (b.byYear['2025'] ?? 0) - offTaxonomy,
     undeveloped: s.tax.vacant,
     fieldVerified: b.groundConfirmed,
-    withUpi: cov.withUpi,
-    withZone: cov.withZone,
   };
 }
 
 const nf = (v: number) => v.toLocaleString('en-US');
 
+/** "Residential — Unplanned" reads as "Residential, unplanned" here: the page
+ *  carries no dashes, and the dashboard's label is the only place they appear. */
+const plainLabel = (code: string) =>
+  (LABELS[code] || code)
+    .replace(/\s+—\s+/, ', ')
+    .replace(/,\s+(\w)/, (_m, c) => `, ${c.toLowerCase()}`);
+
 /**
  * Counts one figure up from zero, once, when it first arrives. Ease-out cubic
- * over 1.2s. Honours prefers-reduced-motion by jumping straight to the value,
- * and the caller keeps the finished sentence out of the animation for anyone
- * reading with assistive technology.
+ * over 1.2s, and prefers-reduced-motion jumps straight to the value.
  */
 function useCountUp(target: number | undefined, ms = 1200) {
   const [shown, setShown] = useState(0);
@@ -89,12 +90,10 @@ function useCountUp(target: number | undefined, ms = 1200) {
   useEffect(() => {
     if (target == null || started.current) return;
     started.current = true;
-
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setShown(target);
       return;
     }
-
     let raf = 0;
     const t0 = performance.now();
     const tick = (now: number) => {
@@ -109,44 +108,19 @@ function useCountUp(target: number | undefined, ms = 1200) {
   return target == null ? null : shown;
 }
 
-/** "Residential — Unplanned" reads as "Residential, unplanned" here: the page
- *  carries no dashes, and the dashboard's label is the only place they appear. */
-const plainLabel = (code: string) =>
-  (LABELS[code] || code).replace(/\s+—\s+/, ', ').replace(/,\s+(\w)/, (_m, c) => `, ${c.toLowerCase()}`);
-
-const DOORS = [
-  {
-    id: 'atlas',
-    kind: 'primary' as const,
-    title: 'Open the Atlas',
-    desc: 'Every structure, its use, zoning and year first seen.',
-    hash: `lens=atlas&at=${CITY_VIEW}`,
-  },
-  {
-    id: 'revenue',
-    kind: 'secondary' as const,
-    title: 'Revenue',
-    desc: 'Undeveloped taxable parcels and use for property tax.',
-    hash: `lens=revenue&at=${CITY_VIEW}`,
-  },
-  {
-    id: 'compliance',
-    kind: 'secondary' as const,
-    title: 'Compliance',
-    desc: 'Buildings checked against the Kigali Master Plan.',
-    hash: `lens=compliance&at=${CITY_VIEW}`,
-  },
+const STEPS: [string, string][] = [
+  ['Imagery', 'Very high resolution satellite imagery of the whole city, flown twice.'],
+  ['AI footprint extraction', 'A model traces every building, then the two years are compared to find what is new.'],
+  ['Land use classification', 'Each footprint is given a use class and joined to its parcel and Master Plan zone.'],
+  ['Field validation', 'Officers confirm structures on the ground, and the confirmation is carried on the record.'],
 ];
 
-const STEPS = [
-  ['Imagery', '30 cm satellite imagery of the whole city, captured in 2023 and again in 2025.'],
-  ['AI footprint extraction', 'A model traces every building footprint, then the two years are compared to find what is new.'],
-  ['Land use classification', 'Each footprint is classified into one of seven use classes and joined to its parcel and Master Plan zone.'],
-  ['Field validation', 'Officers confirm structures on the ground, and those confirmations are carried on the record.'],
-];
+const asset = (f: string) => `${import.meta.env.BASE_URL}${f}`;
 
 export default function Landing() {
   const [figures, setFigures] = useState<Figures | null>(null);
+  const [extra, setExtra] = useState<LandingShape | null>(null);
+  const [split, setSplit] = useState(50);
 
   useEffect(() => {
     let live = true;
@@ -154,9 +128,13 @@ export default function Landing() {
       new URL(`${import.meta.env.BASE_URL}data/${f}`, window.location.href).href;
     Promise.all([
       fetch(at('stats.json')).then((r) => r.json()),
-      fetch(at('coverage.json')).then((r) => r.json()),
+      fetch(at('landing.json')).then((r) => r.json()),
     ])
-      .then(([s, c]: [StatsShape, CoverageShape]) => live && setFigures(derive(s, c)))
+      .then(([s, l]: [StatsShape, LandingShape]) => {
+        if (!live) return;
+        setFigures(derive(s));
+        setExtra(l);
+      })
       .catch(() => undefined);
     return () => {
       live = false;
@@ -167,42 +145,37 @@ export default function Landing() {
     window.location.hash = hash;
   };
 
-  const countStructures = useCountUp(figures?.structures);
-  const countVerified = useCountUp(figures?.fieldVerified);
-
-  const sentence = (a: number, b: number) =>
-    `Loading ${nf(a)} structures across Kigali, ${nf(b)} verified in the field.`;
-
-  /* The ticking copy is hidden from assistive technology, which gets the
-   * finished sentence on the paragraph instead of sixty updates a second. */
-  const liveShown =
-    countStructures == null || countVerified == null
-      ? 'Loading structures across Kigali.'
-      : sentence(countStructures, countVerified);
-  const liveFinal = figures
-    ? sentence(figures.structures, figures.fieldVerified)
-    : 'Loading structures across Kigali.';
-
-  const stats = useMemo(
-    () => [
-      { label: 'Structures', value: figures?.structures },
-      { label: 'New since 2023', value: figures?.newSince2023 },
-      { label: 'Undeveloped taxable parcels', value: figures?.undeveloped },
-      { label: 'Field verified', value: figures?.fieldVerified },
-    ],
-    [figures],
-  );
+  const stats: [string, number | undefined][] = [
+    ['Structures', figures?.structures],
+    ['New since 2023', figures?.newSince2023],
+    ['Undeveloped taxable parcels', figures?.undeveloped],
+    ['Field verified', figures?.fieldVerified],
+  ];
+  const counted = [
+    useCountUp(figures?.structures),
+    useCountUp(figures?.newSince2023),
+    useCountUp(figures?.undeveloped),
+    useCountUp(figures?.fieldVerified),
+  ];
 
   return (
     <main className="lp">
-      <section className="lp-top">
-        <div className="lp-intro">
+      <section className="lp-hero">
+        <img
+          className="lp-hero-img"
+          src={asset('hero-1280.webp')}
+          srcSet={`${asset('hero-960.webp')} 960w, ${asset('hero-1280.webp')} 1280w, ${asset('hero-1920.webp')} 1920w`}
+          sizes="100vw"
+          width={1920}
+          height={1080}
+          fetchPriority="high"
+          decoding="async"
+          alt="Satellite view of Kacyiru, Kigali, with every building footprint filled in the colour of its land use class."
+        />
+        <div className="lp-scrim" aria-hidden="true" />
+
+        <div className="lp-hero-inner">
           <p className="lp-tagline">Building level land use intelligence for Kigali</p>
-
-          <p className="lp-live" aria-label={liveFinal}>
-            <span aria-hidden="true">{liveShown}</span>
-          </p>
-
           <h1 className="lp-title">SPARC Kigali</h1>
           <p className="lp-sub">Smart Parcel Atlas for Resilient Cities</p>
 
@@ -220,102 +193,162 @@ export default function Landing() {
             />
           </div>
 
-          <nav className="lp-doors" aria-label="Open the dashboard">
-            {DOORS.map((d) => (
+          {extra && (
+            <p className="lp-try">
+              <span className="lp-try-label">Try a UPI</span>
+              <button
+                type="button"
+                className="lp-try-upi"
+                onClick={() => open(`upi=${encodeURIComponent(extra.exampleUpi)}`)}
+              >
+                {extra.exampleUpi}
+              </button>
+            </p>
+          )}
+
+          <div className="lp-actions">
+            <a
+              className="lp-cta"
+              href={`#lens=atlas&at=${CITY_VIEW}`}
+              onClick={(e) => {
+                e.preventDefault();
+                open(`lens=atlas&at=${CITY_VIEW}`);
+              }}
+            >
+              Open the Atlas
+            </a>
+            {([['Revenue', 'revenue'], ['Compliance', 'compliance']] as const).map(([label, lens]) => (
               <a
-                key={d.id}
-                className={`lp-door lp-door-${d.kind}`}
-                href={`#${d.hash}`}
+                key={lens}
+                className="lp-link"
+                href={`#lens=${lens}&at=${CITY_VIEW}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  open(d.hash);
+                  open(`lens=${lens}&at=${CITY_VIEW}`);
                 }}
               >
-                <span className="lp-door-title">{d.title}</span>
-                <span className="lp-door-desc">{d.desc}</span>
+                {label}
+                <span className="lp-arrow" aria-hidden="true">
+                  →
+                </span>
               </a>
             ))}
-          </nav>
-
-          {/* In the left column, so it shares its edges with the search box
-              and the door row above it. */}
-          <section className="lp-stats" aria-label="The layer in figures">
-            {stats.map((s) => (
-              <div className="lp-stat" key={s.label}>
-                <p className="lp-stat-label">{s.label}</p>
-                <p className="lp-stat-value">{s.value == null ? ' ' : nf(s.value)}</p>
-              </div>
-            ))}
-          </section>
+          </div>
         </div>
 
-        <figure className="lp-figure">
-          <img
-            className="lp-still"
-            src={`${import.meta.env.BASE_URL}growth-still.webp`}
-            width={1024}
-            height={1024}
-            decoding="async"
-            alt="Density of structures first seen in the 2025 imagery across the 35 sectors of Kigali, brightest where new building is most concentrated."
-          />
-          <figcaption className="lp-figcap">
-            <span className="lp-ramp" aria-hidden="true" />
-            <span className="lp-figcap-text">
-              Where the city grew. Structures first seen in 2025, sparse to dense.
-            </span>
-          </figcaption>
-        </figure>
-      </section>
-
-      <div className="lp-band">
-        <section className="lp-col" aria-labelledby="lp-data-h">
-          <h2 className="lp-h2" id="lp-data-h">
-            The data
-          </h2>
-          <ul className="lp-list">
-            <li>30 cm satellite imagery, captured in 2023 and in 2025.</li>
-            <li>Seven building use classes, assigned to every structure.</li>
-            <li>
-              {figures ? `${nf(figures.withUpi)} structures carry their UPI and ${nf(figures.withZone)} carry a Master Plan zone.` : 'Each structure carries its UPI and its Master Plan zone.'}
-            </li>
-            <li>
-              {figures ? `${nf(figures.fieldVerified)} structures verified in the field.` : 'Structures verified in the field.'}
-            </li>
-          </ul>
-
-          <ul className="lp-uses" aria-label="Building use classes">
+        <div className="lp-legend">
+          <p className="lp-legend-title">Land use</p>
+          <ul className="lp-legend-list">
             {ORDER.map((c) => (
-              <li className="lp-use" key={c}>
+              <li key={c}>
                 <span className="lp-swatch" style={{ background: COLORS[c] }} aria-hidden="true" />
                 {plainLabel(c)}
               </li>
             ))}
           </ul>
-        </section>
+        </div>
+      </section>
 
-        <section className="lp-col" aria-labelledby="lp-how-h">
-          <h2 className="lp-h2" id="lp-how-h">
-            How it works
-          </h2>
-          <ol className="lp-steps">
-            {STEPS.map(([name, line], i) => (
-              <li className="lp-step" key={name}>
-                <span className="lp-step-n">{String(i + 1).padStart(2, '0')}</span>
-                <span className="lp-step-name">{name}</span>
-                <span className="lp-step-line">{line}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      </div>
+      <section className="lp-figures" aria-label="The layer in figures">
+        {stats.map(([label, value], i) => (
+          <div className="lp-fig" key={label}>
+            <p className="lp-fig-label">{label}</p>
+            <p className="lp-fig-value">
+              {value == null ? ' ' : nf(counted[i] ?? value)}
+            </p>
+          </div>
+        ))}
+      </section>
 
+      <section className="lp-proof" aria-labelledby="lp-proof-h">
+        <h2 className="lp-h2" id="lp-proof-h">
+          What changed
+        </h2>
+
+        <div className="lp-slider">
+          <img
+            className="lp-slide"
+            src={asset('proof-2023.webp')}
+            width={1400}
+            height={875}
+            loading="lazy"
+            decoding="async"
+            alt="The same neighbourhood in the earlier imagery, with open ground where buildings later appear."
+          />
+          <div className="lp-slide-after" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
+            <img
+              className="lp-slide"
+              src={asset('proof-2025.webp')}
+              width={1400}
+              height={875}
+              loading="lazy"
+              decoding="async"
+              alt="The same neighbourhood in the later imagery, with the structures SPARC first saw in 2025 outlined."
+            />
+          </div>
+
+          <div className="lp-handle" style={{ left: `${split}%` }} aria-hidden="true">
+            <span className="lp-handle-grip" />
+          </div>
+
+          <input
+            className="lp-range"
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={split}
+            onChange={(e) => setSplit(Number(e.target.value))}
+            aria-label="Reveal the later imagery"
+          />
+
+          <span className="lp-stamp lp-stamp-l" aria-hidden="true">
+            {extra ? extra.proof.before : 'earlier'}
+          </span>
+          <span className="lp-stamp lp-stamp-r" aria-hidden="true">
+            {extra ? extra.proof.after : 'later'}
+          </span>
+        </div>
+
+        <p className="lp-caption">
+          {extra
+            ? `In this one frame of ${extra.proof.place}, ${nf(extra.proof.newInFrame)} structures stand in the later imagery that were not there in the earlier, each one outlined as you drag.`
+            : 'Drag to compare the same frame across two imagery dates.'}
+        </p>
+        {extra && (
+          <p className="lp-credit">
+            Esri World Imagery, Wayback releases {extra.proof.before} and {extra.proof.after}. A
+            release is when the mosaic was published, not when the picture was taken.
+          </p>
+        )}
+      </section>
+
+      <section className="lp-how" aria-labelledby="lp-how-h">
+        <h2 className="lp-h2" id="lp-how-h">
+          How it works
+        </h2>
+        <ol className="lp-steps">
+          {STEPS.map(([name, line]) => (
+            <li className="lp-step" key={name}>
+              <span className="lp-step-name">{name}</span>
+              <span className="lp-step-line">{line}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      {/* Partners. No official logo files exist in this repo. A redrawn or
+          approximated institutional mark is not acceptable, so the names stand
+          as text until the real assets are supplied. */}
       <section className="lp-partners" aria-labelledby="lp-partners-h">
         <h2 className="lp-h2" id="lp-partners-h">
           Partners
         </h2>
-        <p className="lp-partner-list">
-          National Land Authority. City of Kigali. World Bank.
-        </p>
+        <ul className="lp-partner-list">
+          <li>National Land Authority</li>
+          <li>City of Kigali</li>
+          <li>World Bank</li>
+        </ul>
       </section>
 
       <footer className="lp-footer">
@@ -323,17 +356,6 @@ export default function Landing() {
           The boundaries, colors, denominations, and any other information shown on any map in this
           work do not imply any judgment on the part of The World Bank concerning the legal status
           of any territory or the endorsement or acceptance of such boundaries.
-        </p>
-        <p className="lp-foot-link">
-          <a
-            href={`#${DOORS[0].hash}`}
-            onClick={(e) => {
-              e.preventDefault();
-              open(DOORS[0].hash);
-            }}
-          >
-            Open the dashboard
-          </a>
         </p>
       </footer>
     </main>
