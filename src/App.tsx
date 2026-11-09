@@ -23,7 +23,9 @@ const LENSES: { id: LensId; label: string }[] = [
   { id: 'compliance', label: 'Compliance' },
 ];
 
-const initial = readUrl();
+/** A UPI handed over in the hash, so one building can be opened from a link. */
+const readUpi = () =>
+  new URLSearchParams(window.location.hash.replace(/^#/, '')).get('upi');
 
 /**
  * A single line of progress across the seam under the top bar. Determinate once
@@ -47,6 +49,15 @@ function LoadBar({ progress }: { progress: LoadProgress | null }) {
 }
 
 export default function App() {
+  /* The URL as it stood when this mount began. Read here rather than at module
+   * scope so that a second visit within one session, landing page to a door and
+   * back and out again, starts from the hash it was given instead of the hash
+   * the first visit happened to see. The dashboard mounts once, so this is the
+   * same value it always had. Both reads are snapshots: writeUrl rewrites the
+   * hash on first render and drops every key it does not own, including upi. */
+  const [initial] = useState(readUrl);
+  const [bootUpi] = useState(readUpi);
+
   const [lens, setLens] = useState<LensId>(initial.lens);
   /* Revenue view only: restrict use conflicts to structures an officer has
    * confirmed on the ground. On by default — a conflict someone has stood in
@@ -175,6 +186,15 @@ export default function App() {
     },
     [dataset, showToast],
   );
+
+  /* Open the building a link named, once the dataset is in hand. The lookup
+   * needs the UPI index, so it cannot run with the rest of the URL state. */
+  const upiOpened = useRef(false);
+  useEffect(() => {
+    if (!dataset || !bootUpi || upiOpened.current) return;
+    upiOpened.current = true;
+    goToUpi(bootUpi);
+  }, [dataset, bootUpi, goToUpi]);
 
   const onCamera = useCallback((c: CameraState) => {
     cameraRef.current = c;

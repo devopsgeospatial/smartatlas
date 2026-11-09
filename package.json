@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "check:search": "esbuild tools/check-search.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/check-search.cjs --log-level=error && node node_modules/.cache/check-search.cjs",
     "data": "python tools/prepare_data.py",
+    "data:landing": "python tools/make_landing_assets.py",
     "check:data": "node tools/check-dataset.mjs"
   },
   "dependencies": {

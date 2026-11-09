@@ -23,3 +23,13 @@ _parcel_upis.txt
 tools/rental_annex_rpi.py
 tools/rental_calibrate.py
 tools/rental_flags.py
+
+# Registry join inputs and outputs — building-level UPIs and the RRA tax-roll
+# comparison. This repo is public; these must never be committed.
+buildings_for_join.csv.gz
+reconciliation_result.csv
+summary_counts.csv
+
+# Client deliverables and working documents, kept out of the public repo.
+SPARC Reports/
+SPARC_Project_Document.docx
