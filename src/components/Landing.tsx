@@ -137,17 +137,6 @@ const SIDE_DOORS: [string, string][] = [
   ['Field assessment', `lens=atlas&at=${FIELD_VIEW}&export=1`],
 ];
 
-const CARRIES = [
-  'A use class',
-  'The year it was first seen',
-  'Its parcel identifier',
-  'Its Master Plan zone',
-  'Its footprint area',
-  'An estimated height',
-  'The storey count that follows',
-  'Whether an officer has confirmed it',
-];
-
 const asset = (f: string) => `${import.meta.env.BASE_URL}${f}`;
 
 export default function Landing() {
@@ -326,11 +315,12 @@ export default function Landing() {
             aria-label="Reveal the later imagery"
           />
 
+          {/* Orientation only. Release dates are not named on the page. */}
           <span className="lp-stamp lp-stamp-l" aria-hidden="true">
-            {extra ? extra.proof.before : 'earlier'}
+            Earlier
           </span>
           <span className="lp-stamp lp-stamp-r" aria-hidden="true">
-            {extra ? extra.proof.after : 'later'}
+            Later
           </span>
         </div>
 
@@ -339,12 +329,7 @@ export default function Landing() {
             ? `In this one frame of ${extra.proof.place}, ${nf(extra.proof.newInFrame)} structures stand in the later imagery that were not there in the earlier, each one outlined as you drag.`
             : 'Drag to compare the same frame across two imagery dates.'}
         </p>
-        {extra && (
-          <p className="lp-credit">
-            Esri World Imagery, Wayback releases {extra.proof.before} and {extra.proof.after}. A
-            release is when the mosaic was published, not when the picture was taken.
-          </p>
-        )}
+        <p className="lp-credit">Imagery shown for illustration.</p>
       </section>
 
       <section className="lp-cases" aria-labelledby="lp-cases-h">
@@ -355,30 +340,16 @@ export default function Landing() {
           <article className="lp-case">
             <h3 className="lp-case-h">Property taxation</h3>
             <p className="lp-case-p">
-              Every structure extracted from the imagery carries its parcel identifier, so the
-              record can be set beside the tax roll, parcel by parcel. Two things fall out of
-              that comparison, and they are different kinds of finding.
+              Every extracted structure carries its parcel identifier, so the record can be set
+              beside the tax roll:{' '}
+              {extra ? nf(extra.registry.notOnRoll) : 'some'} structures that appeared since the
+              last imagery sit on parcels the roll does not hold, and{' '}
+              {extra ? nf(extra.registry.conflictsAll) : 'others'} show a declared use that
+              disagrees with the imagery.
             </p>
             <p className="lp-case-p">
-              <b className="lp-emph">Not on the roll.</b>{' '}
-              {extra ? nf(extra.registry.notOnRoll) : 'Structures'} structures that appeared
-              since the last imagery sit on parcels the roll does not hold. Read it as an upper
-              bound, not a count: exempt property has to come out first, and the exemption flag
-              reaches{' '}
-              {extra ? nf(extra.registry.exemptFlagged) : 'a handful of'} records so far. The
-              number can only fall.
-            </p>
-            <p className="lp-case-p">
-              <b className="lp-emph">Use declared against use observed.</b> Where a parcel is on
-              the roll, what the owner declared can be set against what the imagery sees. The two
-              disagree on {extra ? nf(extra.registry.conflictsAll) : 'many'} parcels, and{' '}
-              {extra ? nf(extra.registry.conflictsVerified) : 'some'} of those sit on structures
-              an officer has already confirmed on the ground. Those are evidence. The rest are
-              leads, and the difference matters.
-            </p>
-            <p className="lp-case-p">
-              Neither figure is a revenue estimate, and the layer does not produce one. It says
-              which properties to go and look at. What they are worth stays with the authority.
+              That is a worklist, not an assessment, and the first figure is an upper bound until
+              exempt property is taken out.
             </p>
           </article>
 
@@ -389,11 +360,8 @@ export default function Landing() {
               can be read against what was actually built rather than against what was approved.
             </p>
             <p className="lp-case-p">
-              Of the structures that appeared in the later imagery,{' '}
-              {extra ? nf(extra.undesignatedNew) : 'a share'} stand on land the plan does not
-              designate for building at all: farmland, the transport reserve, steep slopes,
-              forest, parks and the water zones. Sorted by sector, that is a list an inspection
-              team can be handed one area at a time.
+              Structures that appeared on land the plan does not designate for building are
+              flagged by sector, so the plan can be followed up area by area.
             </p>
           </article>
         </div>
@@ -403,12 +371,6 @@ export default function Landing() {
         <h2 className="lp-h2" id="lp-how-h">
           How the layer is made
         </h2>
-        <p className="lp-lead">
-          SPARC is built by GeoAI, not by survey. Models read the imagery and produce the record,
-          and people check it. That is what makes a city of this size affordable to map building
-          by building, and repeatable the next time imagery lands rather than a project that has
-          to be started again.
-        </p>
         <ol className="lp-steps">
           {STEPS.map(([name, line]) => (
             <li className="lp-step" key={name}>
@@ -423,68 +385,44 @@ export default function Landing() {
         <h2 className="lp-h2" id="lp-carry-h">
           What each building carries
         </h2>
-        <div className="lp-carry-grid">
-          <ul className="lp-attrs">
-            {CARRIES.map((a) => (
-              <li key={a}>{a}</li>
-            ))}
-          </ul>
-          <div className="lp-carry-note">
-            <p className="lp-case-p">
-              Height is the attribute that turns a footprint into floor space, and floor space is
-              what a valuation and a density rule both need.
-            </p>
-            <p className="lp-case-p">
-              {extra
-                ? `${nf(extra.attributes.withHeight)} structures carry an estimated height, and ${nf(extra.attributes.fourStoreysPlus)} of those stand four storeys or more. The tallest estimate in the layer is ${extra.attributes.tallestStoreys} storeys.`
-                : 'Structures carry an estimated height, and the storey count follows from it.'}{' '}
-              Where the imagery does not support a height, the record is left blank rather than
-              filled with a guess.
-            </p>
-          </div>
-        </div>
+        <p className="lp-carry-line">
+          Each building carries its use class, parcel identifier, Master Plan zone, footprint
+          area, estimated height and storeys, year first seen, and whether an officer has
+          confirmed it.
+        </p>
+        <p className="lp-carry-note">
+          {extra ? `${nf(extra.attributes.withHeight)} structures carry` : 'Structures carry'} an
+          estimated height. Where the imagery does not support a height, the record is left blank
+          rather than filled with a guess.
+        </p>
       </section>
 
-      {/* Marks are normalised by ink area, not by height, so a wide wordmark
-          does not read larger than a round seal. Three are knocked down to the
-          one ink colour; the coat of arms keeps its own, because flattening a
-          detailed national emblem to a single colour turns it into a blank
-          disc. tools/make_landing_assets.py does the conversion. */}
+      {/* Marks are sized by the geometric mean of equal ink area and equal
+          height, so a long wordmark does not read larger than a compact one.
+          The World Bank sits as text because the only file available is the
+          globe device without its wordmark, and the globe may not stand alone.
+          tools/make_landing_assets.py does the conversion. */}
       <section className="lp-partners" aria-labelledby="lp-partners-h">
         <h2 className="lp-h2" id="lp-partners-h">
           Partners
         </h2>
-        {extra && extra.logos.length > 0 ? (
-          <ul className="lp-logos">
-            {extra.logos.map((l) => (
-              <li key={l.file}>
-                <img
-                  src={asset(l.file)}
-                  width={l.w}
-                  height={l.h}
-                  loading="lazy"
-                  decoding="async"
-                  alt={l.name}
-                  style={{ height: `${Math.round(l.h / 2.2)}px` }}
-                />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <ul className="lp-partner-list">
-            <li>National Land Authority</li>
-            <li>Republic of Rwanda</li>
-            <li>Rwanda Revenue Authority</li>
-            <li>World Bank</li>
-          </ul>
-        )}
+        <ul className="lp-logos">
+          {(extra?.logos ?? []).map((l) => (
+            <li key={l.file}>
+              <img
+                src={asset(l.file)}
+                width={l.w}
+                height={l.h}
+                loading="lazy"
+                decoding="async"
+                alt={l.name}
+                style={{ height: `${Math.round(l.h / 2.4)}px` }}
+              />
+            </li>
+          ))}
+          <li className="lp-logo-text">World Bank</li>
+        </ul>
       </section>
-
-      <footer className="lp-footer">
-        <p className="lp-disclaimer">
-          Dataset of record 1 October 2026. Imagery: Esri World Imagery.
-        </p>
-      </footer>
     </main>
   );
 }

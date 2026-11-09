@@ -226,7 +226,7 @@ body[data-screen='landing'] #root {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 32px 0;
-  padding: 56px 24px;
+  padding: 56px 24px 0;
   max-width: 1440px;
   margin-inline: auto;
 }
@@ -434,54 +434,21 @@ body[data-screen='landing'] #root {
   max-width: 62ch;
 }
 
-/* ---- the GeoAI lead -------------------------------------------------------- */
-
-.lp-lead {
-  font-size: clamp(19px, 1.9vw, 24px);
-  line-height: 1.5;
-  color: var(--tx-1);
-  max-width: 50ch;
-  margin-bottom: 48px;
-}
-
 /* ---- what each building carries -------------------------------------------- */
 
-.lp-carry-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 40px;
-}
-
-.lp-attrs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 24px;
-  align-content: start;
-}
-
-.lp-attrs li {
-  position: relative;
-  padding-left: 20px;
-  font-size: 15px;
-  line-height: 1.45;
+.lp-carry-line {
+  font-size: clamp(17px, 1.7vw, 21px);
+  line-height: 1.55;
   color: var(--tx-1);
-}
-
-.lp-attrs li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.55em;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--r-pill);
-  background: var(--accent);
+  max-width: 70ch;
 }
 
 .lp-carry-note {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--tx-3);
+  max-width: 70ch;
+  margin-top: 16px;
 }
 
 /* ---- how it works ---------------------------------------------------------- */
@@ -528,7 +495,22 @@ body[data-screen='landing'] #root {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 32px 56px;
+  gap: 28px 64px;
+  min-height: 72px;
+}
+
+.lp-logos li {
+  display: flex;
+  align-items: center;
+}
+
+/* The partner with no usable mark sits on the same centre line, weighted to
+   read as the same optical size as the marks beside it. */
+.lp-logo-text {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tx-1);
 }
 
 .lp-logos img {
@@ -604,8 +586,11 @@ body[data-screen='landing'] #root {
     bottom: 40px;
   }
 
+  /* No bottom padding: the next section's 120px margin is the whole gap,
+     so the band sits the same distance from what follows as every other
+     section does. */
   .lp-figures {
-    padding: 96px 40px;
+    padding: 96px 40px 0;
     gap: 0;
   }
 
@@ -640,16 +625,7 @@ body[data-screen='landing'] #root {
     border-left: 1px solid var(--line-1);
   }
 
-  .lp-carry-grid {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 72px;
-  }
-
-  .lp-footer {
-    padding: 0 40px 96px;
-    margin-top: 120px;
-  }
-
+  /* The four steps are one row on desktop, not a two by two block. */
   .lp-steps {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 40px;

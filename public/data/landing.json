@@ -5,28 +5,14 @@
     {
       "name": "National Land Authority",
       "file": "logo-national-land-authority.webp",
-      "w": 291,
-      "h": 146,
+      "w": 340,
+      "h": 170,
       "mono": true
-    },
-    {
-      "name": "Republic of Rwanda",
-      "file": "logo-republic-of-rwanda.webp",
-      "w": 306,
-      "h": 138,
-      "mono": false
     },
     {
       "name": "Rwanda Revenue Authority",
       "file": "logo-rwanda-revenue-authority.webp",
-      "w": 613,
-      "h": 163,
-      "mono": true
-    },
-    {
-      "name": "World Bank",
-      "file": "logo-world-bank.webp",
-      "w": 190,
+      "w": 715,
       "h": 190,
       "mono": true
     }

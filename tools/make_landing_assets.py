@@ -364,16 +364,16 @@ def make_logos():
         print("  no Logo folder, partner marks left as text")
         return []
 
+    # Only marks that may be shown as supplied.
+    #
+    # The Republic of Rwanda seal is not in the partners row by instruction.
+    # WB.jpg is the globe device on its own, with no wordmark; the World Bank
+    # mark may not be shown as a bare globe, so the page sets that partner as
+    # text until an approved full logo file exists.
     found = []
     for name, file, mono in (
         ("National Land Authority", "NLA_Logo.png", True),
-        # The coat of arms is a detailed multi-colour emblem. Reducing it to a
-        # single colour turns it into a blank disc, which misrepresents a
-        # national emblem, so it keeps its own colours until an official
-        # one-colour version is supplied.
-        ("Republic of Rwanda", "Rwanda-Gov-logo-(Horizontal).png", False),
         ("Rwanda Revenue Authority", "Rwanda-Revenue-Authority-logo.png", True),
-        ("World Bank", "WB.jpg", True),
     ):
         p = os.path.join(LOGO_SRC, file)
         if not os.path.isfile(p):
