@@ -33,3 +33,6 @@ summary_counts.csv
 # Client deliverables and working documents, kept out of the public repo.
 SPARC Reports/
 SPARC_Project_Document.docx
+
+# Hero candidates from tools/make_landing_assets.py, regenerable.
+/build/

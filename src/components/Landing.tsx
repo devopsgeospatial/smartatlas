@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import SearchBox from './SearchBox';
 import { COLORS, LABELS, ORDER } from '../constants';
 import { CITY_BBOX } from '../sectors';
@@ -76,6 +76,39 @@ function derive(s: StatsShape, cov: CoverageShape): Figures {
 
 const nf = (v: number) => v.toLocaleString('en-US');
 
+/**
+ * Counts one figure up from zero, once, when it first arrives. Ease-out cubic
+ * over 1.2s. Honours prefers-reduced-motion by jumping straight to the value,
+ * and the caller keeps the finished sentence out of the animation for anyone
+ * reading with assistive technology.
+ */
+function useCountUp(target: number | undefined, ms = 1200) {
+  const [shown, setShown] = useState(0);
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (target == null || started.current) return;
+    started.current = true;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setShown(target);
+      return;
+    }
+
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / ms);
+      setShown(Math.round(target * (1 - (1 - p) ** 3)));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+
+  return target == null ? null : shown;
+}
+
 /** "Residential — Unplanned" reads as "Residential, unplanned" here: the page
  *  carries no dashes, and the dashboard's label is the only place they appear. */
 const plainLabel = (code: string) =>
@@ -134,8 +167,20 @@ export default function Landing() {
     window.location.hash = hash;
   };
 
-  const liveLine = figures
-    ? `Loading ${nf(figures.structures)} structures across Kigali, ${nf(figures.fieldVerified)} verified in the field.`
+  const countStructures = useCountUp(figures?.structures);
+  const countVerified = useCountUp(figures?.fieldVerified);
+
+  const sentence = (a: number, b: number) =>
+    `Loading ${nf(a)} structures across Kigali, ${nf(b)} verified in the field.`;
+
+  /* The ticking copy is hidden from assistive technology, which gets the
+   * finished sentence on the paragraph instead of sixty updates a second. */
+  const liveShown =
+    countStructures == null || countVerified == null
+      ? 'Loading structures across Kigali.'
+      : sentence(countStructures, countVerified);
+  const liveFinal = figures
+    ? sentence(figures.structures, figures.fieldVerified)
     : 'Loading structures across Kigali.';
 
   const stats = useMemo(
@@ -154,8 +199,8 @@ export default function Landing() {
         <div className="lp-intro">
           <p className="lp-tagline">Building level land use intelligence for Kigali</p>
 
-          <p className="lp-live" aria-live="polite">
-            {liveLine}
+          <p className="lp-live" aria-label={liveFinal}>
+            <span aria-hidden="true">{liveShown}</span>
           </p>
 
           <h1 className="lp-title">SPARC Kigali</h1>
@@ -191,6 +236,17 @@ export default function Landing() {
               </a>
             ))}
           </nav>
+
+          {/* In the left column, so it shares its edges with the search box
+              and the door row above it. */}
+          <section className="lp-stats" aria-label="The layer in figures">
+            {stats.map((s) => (
+              <div className="lp-stat" key={s.label}>
+                <p className="lp-stat-label">{s.label}</p>
+                <p className="lp-stat-value">{s.value == null ? ' ' : nf(s.value)}</p>
+              </div>
+            ))}
+          </section>
         </div>
 
         <figure className="lp-figure">
@@ -209,15 +265,6 @@ export default function Landing() {
             </span>
           </figcaption>
         </figure>
-      </section>
-
-      <section className="lp-stats" aria-label="The layer in figures">
-        {stats.map((s) => (
-          <div className="lp-stat" key={s.label}>
-            <p className="lp-stat-label">{s.label}</p>
-            <p className="lp-stat-value">{s.value == null ? ' ' : nf(s.value)}</p>
-          </div>
-        ))}
       </section>
 
       <div className="lp-band">
