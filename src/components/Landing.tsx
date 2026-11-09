@@ -45,6 +45,13 @@ interface LandingShape {
     exemptFlagged: number;
   };
   attributes: { withHeight: number; fourStoreysPlus: number; tallestStoreys: number };
+  panels: string[];
+  crops: Record<'taxation' | 'compliance', { file: string; highlighted: number }>;
+  record: {
+    upi: string; use: string; zone: string; zoneLabel: string;
+    areaM2: number; floors: number; heightM: number; year: string;
+    verified: boolean; place: (string | null)[]; crop: string;
+  };
   proof: {
     place: string;
     newInFrame: number;
@@ -88,18 +95,55 @@ const plainLabel = (code: string) =>
     .replace(/\s+—\s+/, ', ')
     .replace(/,\s+(\w)/, (_m, c) => `, ${c.toLowerCase()}`);
 
+const reduced = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 /**
- * Counts one figure up from zero, once, when it first arrives. Ease-out cubic
- * over 1.2s, and prefers-reduced-motion jumps straight to the value.
+ * Fires once, the first time the element is on screen. Everything that
+ * animates on this page waits for it, so nothing moves above the fold that
+ * the reader never sees, and nothing has already finished by the time they
+ * scroll to it.
  */
-function useCountUp(target: number | undefined, ms = 1200) {
+function useInView<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [seen, setSeen] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || seen) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setSeen(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setSeen(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.25 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+
+  return [ref, seen] as const;
+}
+
+/**
+ * Counts one figure up from zero, once, when the band is first on screen.
+ * Ease-out cubic over 1.2s, and prefers-reduced-motion jumps to the value.
+ */
+function useCountUp(target: number | undefined, start: boolean, ms = 1200) {
   const [shown, setShown] = useState(0);
   const started = useRef(false);
 
   useEffect(() => {
-    if (target == null || started.current) return;
+    if (target == null || !start || started.current) return;
     started.current = true;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (reduced()) {
       setShown(target);
       return;
     }
@@ -112,10 +156,21 @@ function useCountUp(target: number | undefined, ms = 1200) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, ms]);
+  }, [target, start, ms]);
 
   return target == null ? null : shown;
 }
+
+const PANELS = ['panel-1-imagery', 'panel-2-footprints', 'panel-3-use', 'panel-4-verified'];
+const PANEL_ALT = [
+  'A tile of Kigali in raw satellite imagery.',
+  'The same tile with every building footprint traced in outline.',
+  'The same tile with each footprint filled in the colour of its land use class.',
+  'The same tile again, with a marker on each building an officer has confirmed.',
+];
+
+/** Strip the leading code from "C1-Mixed use zone". */
+const zoneDesc = (label: string) => (label || '').replace(/^[A-Z0-9]+\s*-\s*/, '');
 
 const STEPS: [string, string][] = [
   ['Imagery', '30 cm satellite imagery of the whole city, captured twice so the two years can be compared.'],
@@ -166,17 +221,24 @@ export default function Landing() {
     window.location.hash = hash;
   };
 
-  const stats: [string, number | undefined][] = [
-    ['Structures', figures?.structures],
-    ['New since 2023', figures?.newSince2023],
-    ['Undeveloped taxable parcels', figures?.undeveloped],
-    ['Field verified', figures?.fieldVerified],
+  const [bandRef, bandSeen] = useInView<HTMLElement>();
+  const [stripRef, stripSeen] = useInView<HTMLOListElement>();
+
+  /* Each figure opens the view it was counted from. Field verified is the one
+   * that cannot be filtered in a link: the dashboard has no verified filter in
+   * its URL, so it opens the Revenue lens, where ground confirmation is what
+   * the panel is built around. */
+  const stats: [string, number | undefined, string][] = [
+    ['Structures', figures?.structures, `lens=atlas&at=${CITY_VIEW}`],
+    ['New since 2023', figures?.newSince2023, `year=2025&at=${CITY_VIEW}`],
+    ['Undeveloped taxable parcels', figures?.undeveloped, `lens=revenue&at=${CITY_VIEW}`],
+    ['Field verified', figures?.fieldVerified, `lens=revenue&at=${CITY_VIEW}`],
   ];
   const counted = [
-    useCountUp(figures?.structures),
-    useCountUp(figures?.newSince2023),
-    useCountUp(figures?.undeveloped),
-    useCountUp(figures?.fieldVerified),
+    useCountUp(figures?.structures, bandSeen),
+    useCountUp(figures?.newSince2023, bandSeen),
+    useCountUp(figures?.undeveloped, bandSeen),
+    useCountUp(figures?.fieldVerified, bandSeen),
   ];
 
   return (
@@ -229,6 +291,7 @@ export default function Landing() {
             >
               Open the Atlas
             </a>
+            <span className="lp-links">
             {SIDE_DOORS.map(([label, hash]) => (
               <a
                 key={label}
@@ -245,6 +308,7 @@ export default function Landing() {
                 </span>
               </a>
             ))}
+            </span>
           </div>
         </div>
 
@@ -261,14 +325,22 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="lp-figures" aria-label="The layer in figures">
-        {stats.map(([label, value], i) => (
-          <div className="lp-fig" key={label}>
-            <p className="lp-fig-label">{label}</p>
-            <p className="lp-fig-value">
+      <section className="lp-figures" aria-label="The layer in figures" ref={bandRef}>
+        {stats.map(([label, value, hash], i) => (
+          <a
+            className="lp-fig"
+            key={label}
+            href={`#${hash}`}
+            onClick={(e) => {
+              e.preventDefault();
+              open(hash);
+            }}
+          >
+            <span className="lp-fig-label">{label}</span>
+            <span className="lp-fig-value">
               {value == null ? ' ' : nf(counted[i] ?? value)}
-            </p>
-          </div>
+            </span>
+          </a>
         ))}
       </section>
 
@@ -337,6 +409,17 @@ export default function Landing() {
         </h2>
         <div className="lp-case-grid">
           <article className="lp-case">
+            {extra && (
+              <img
+                className="lp-case-crop"
+                src={asset(extra.crops.taxation.file)}
+                width={960}
+                height={540}
+                loading="lazy"
+                decoding="async"
+                alt="Imagery of a Jabana street, with the structures that appeared since the last imagery and are not on the tax roll picked out."
+              />
+            )}
             <h3 className="lp-case-h">Property taxation</h3>
             <p className="lp-case-p">
               Every extracted structure carries its parcel identifier, so the record can be set
@@ -353,6 +436,17 @@ export default function Landing() {
           </article>
 
           <article className="lp-case">
+            {extra && (
+              <img
+                className="lp-case-crop"
+                src={asset(extra.crops.compliance.file)}
+                width={960}
+                height={540}
+                loading="lazy"
+                decoding="async"
+                alt="Imagery of Kigarama, with the structures that appeared on land the Master Plan does not designate for building picked out."
+              />
+            )}
             <h3 className="lp-case-h">Compliance monitoring</h3>
             <p className="lp-case-p">
               Every structure carries the Master Plan zone of the parcel beneath it, so the plan
@@ -370,9 +464,24 @@ export default function Landing() {
         <h2 className="lp-h2" id="lp-how-h">
           How the layer is made
         </h2>
-        <ol className="lp-steps">
-          {STEPS.map(([name, line]) => (
-            <li className="lp-step" key={name}>
+        {/* One tile of Kigali, four passes over it. The panels reveal left to
+            right the first time the strip is on screen, and not at all under
+            prefers-reduced-motion. */}
+        <ol
+          className={'lp-steps' + (stripSeen || reduced() ? ' is-in' : '')}
+          ref={stripRef}
+        >
+          {STEPS.map(([name, line], i) => (
+            <li className="lp-step" key={name} style={{ transitionDelay: `${i * 110}ms` }}>
+              <img
+                className="lp-panel"
+                src={asset(`${PANELS[i]}.webp`)}
+                width={600}
+                height={600}
+                loading="lazy"
+                decoding="async"
+                alt={PANEL_ALT[i]}
+              />
               <span className="lp-step-name">{name}</span>
               <span className="lp-step-line">{line}</span>
             </li>
@@ -384,11 +493,48 @@ export default function Landing() {
         <h2 className="lp-h2" id="lp-carry-h">
           What each building carries
         </h2>
-        <p className="lp-carry-line">
-          Each building carries its use class, parcel identifier, Master Plan zone, footprint
-          area, estimated height and storeys, year first seen, and whether an officer has
-          confirmed it.
-        </p>
+        {extra && (
+          <div className="lp-record">
+            <img
+              className="lp-record-crop"
+              src={asset(extra.record.crop)}
+              width={560}
+              height={560}
+              loading="lazy"
+              decoding="async"
+              alt={`Imagery of the building at ${extra.record.upi}, picked out in its land use colour.`}
+            />
+            <div className="lp-card">
+              <p className="lp-card-kicker">Building Information</p>
+              <p className="lp-card-upi">{extra.record.upi}</p>
+              <p className="lp-card-place">
+                <b>{extra.record.place[0]}</b>
+                <span>{extra.record.place.slice(1).filter(Boolean).join(' · ')}</span>
+              </p>
+              <dl className="lp-card-facts">
+                {([
+                  ['Observed use', plainLabel(extra.record.use), COLORS[extra.record.use]],
+                  ['Master Plan zone', `${extra.record.zone} ${zoneDesc(extra.record.zoneLabel)}`, null],
+                  ['Footprint', `${nf(extra.record.areaM2)} m²`, null],
+                  ['Height', `${extra.record.heightM} m`, null],
+                  ['Storeys', String(extra.record.floors), null],
+                  ['First seen', extra.record.year, null],
+                  ['Field check', extra.record.verified ? 'Confirmed on the ground' : 'Not confirmed', null],
+                ] as [string, string, string | null][]).map(([k, v, swatch]) => (
+                  <div className="lp-card-row" key={k}>
+                    <dt>{k}</dt>
+                    <dd>
+                      {swatch && (
+                        <span className="lp-swatch" style={{ background: swatch }} aria-hidden="true" />
+                      )}
+                      {v}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </div>
+        )}
         <p className="lp-carry-note">
           {extra ? `${nf(extra.attributes.withHeight)} structures carry` : 'Structures carry'} an
           estimated height. Where the imagery does not support a height, the record is left blank

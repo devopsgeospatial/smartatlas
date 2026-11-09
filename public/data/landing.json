@@ -20,5 +20,39 @@
     "conflictsVerified": 8345,
     "conflictsAll": 87408,
     "exemptFlagged": 32
+  },
+  "panels": [
+    "panel-1-imagery",
+    "panel-2-footprints",
+    "panel-3-use",
+    "panel-4-verified"
+  ],
+  "record": {
+    "upi": "1/01/09/03/1194",
+    "use": "CM",
+    "zone": "C1",
+    "zoneLabel": "C1-Mixed use zone",
+    "areaM2": 618,
+    "floors": 8,
+    "heightM": 26.4,
+    "year": "2023",
+    "verified": true,
+    "place": [
+      "Inyarurembo",
+      "Kiyovu",
+      "Nyarugenge",
+      "Nyarugenge"
+    ],
+    "crop": "record-crop.webp"
+  },
+  "crops": {
+    "taxation": {
+      "file": "crop-taxation.webp",
+      "highlighted": 33
+    },
+    "compliance": {
+      "file": "crop-compliance.webp",
+      "highlighted": 34
+    }
   }
 }

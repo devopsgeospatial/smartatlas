@@ -158,8 +158,12 @@ class Layer:
         self.floors = np.frombuffer(raw, np.uint8, n, o + n * 2)
         self.area = np.frombuffer(raw, "<u2", n, o + n * 4)
         self.height = np.frombuffer(raw, "<u2", n, o + n * 4 + n * 2)
+        self.admin = np.frombuffer(raw, "<u2", n, o + n * 4 + n * 4)
         self.sector = np.frombuffer(raw, np.uint8, n, o + n * 4 + n * 6)
         self.zone = np.frombuffer(raw, np.uint8, n, o + n * 4 + n * 6 + n)
+        self.rev = np.frombuffer(raw, np.uint8, n, o + n * 4 + n * 6 + n * 2)
+        self.verified = np.frombuffer(raw, np.uint8, n, o + n * 4 + n * 6 + n * 4)
+        self.admin_table = json.load(io.open(os.path.join(DATA, "admin.json"), encoding="utf-8"))["units"]
         self.sector_names = self.stats["buildings"]["sectorNames"]
         self.zone_names = self.stats["buildings"]["zoneNames"]
         self.upis = io.open(os.path.join(DATA, "upis.txt"), encoding="utf-8").read().split("\n")
@@ -344,6 +348,174 @@ def example_upi(L, bb):
             print(f"  example UPI {u}  ({ORDER[L.use[i]]}, {int(L.area[i])} m2)")
             return u
     raise SystemExit("no UPI in the hero frame")
+
+
+def crop_render(L, cx, cy, width_m, size, draw_fn=None, aspect=1.0, dim=0.0):
+    """Esri imagery for one frame, with an optional vector overlay on top.
+
+    dim desaturates and darkens the base. Kigali roofs are largely terracotta,
+    so a red or amber highlight over untreated imagery reads as just another
+    roof. Pulling the ground back is a presentation treatment on the picture,
+    not a change to anything the picture is evidence of.
+    """
+    bb = bbox_for(cx, cy, width_m, aspect)
+    base = mosaic_any(bb, size, ESRI_NOW)
+    if base is None:
+        raise SystemExit(f"imagery unavailable for {cy},{cx}")
+    if dim > 0:
+        a = np.asarray(base.convert("RGB")).astype(np.float32)
+        grey = a @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+        a = a * (1 - dim) + grey[..., None] * dim
+        base = Image.fromarray(np.clip(a * (1 - dim * 0.45), 0, 255).astype(np.uint8), "RGB")
+    if draw_fn is None:
+        return base.convert("RGB"), bb
+    w, h = size[0] * SS, size[1] * SS
+    over = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw_fn(ImageDraw.Draw(over), bb, w, h)
+    out = base.convert("RGBA")
+    out.alpha_composite(over.resize(size, Image.LANCZOS))
+    return out.convert("RGB"), bb
+
+
+def ring_pts(L, i, bb, w, h):
+    r = L.ring(int(i))
+    return None if r is None else project(r[0], r[1], bb, w, h)
+
+
+# The four panels of "how the layer is made": one tile, four passes over it.
+PANEL_M = 200.0
+PANEL_PX = 600
+# A dense Gitega tile: six use classes and 138 field-confirmed structures.
+PANEL_AT = (30.05406, -1.95203)
+
+
+def make_panels(L):
+    cx, cy = PANEL_AT
+    out = []
+
+    def outlines(d, bb, w, h):
+        for i in np.nonzero(L.in_frame(bb))[0]:
+            p = ring_pts(L, i, bb, w, h)
+            if p:
+                d.line(p + [p[0]], fill=ACCENT + (255,), width=2 * SS, joint="curve")
+
+    def filled(d, bb, w, h, marks=False):
+        for i in np.nonzero(L.in_frame(bb))[0]:
+            p = ring_pts(L, i, bb, w, h)
+            if p:
+                d.polygon(p, fill=COLORS[ORDER[L.use[i]]] + (FILL_ALPHA,))
+        if not marks:
+            return
+        for i in np.nonzero(L.in_frame(bb) & (L.verified == 1))[0]:
+            r = L.ring(int(i))
+            if r is None:
+                continue
+            x = float(np.mean(r[0]))
+            y = float(np.mean(r[1]))
+            px, py = project([x], [y], bb, w, h)[0]
+            rad = 5 * SS
+            d.ellipse([px - rad, py - rad, px + rad, py + rad],
+                      fill=(255, 255, 255, 235), outline=(10, 16, 17, 255), width=SS)
+
+    for name, fn in (
+        ("panel-1-imagery", None),
+        ("panel-2-footprints", outlines),
+        ("panel-3-use", lambda d, bb, w, h: filled(d, bb, w, h, False)),
+        ("panel-4-verified", lambda d, bb, w, h: filled(d, bb, w, h, True)),
+    ):
+        img, bb = crop_render(L, cx, cy, PANEL_M, (PANEL_PX, PANEL_PX), fn)
+        p = os.path.join(PUB, f"{name}.webp")
+        img.save(p, format="WEBP", quality=78, method=6)
+        out.append(name)
+        print(f"  {name:<22}{os.path.getsize(p)/1024:5.0f} KB")
+    n_ver = int((L.in_frame(bbox_for(cx, cy, PANEL_M, 1.0)) & (L.verified == 1)).sum())
+    print(f"  panel tile: {int(L.in_frame(bbox_for(cx, cy, PANEL_M, 1.0)).sum())} buildings, "
+          f"{n_ver} field confirmed")
+    return out
+
+
+# The record card's building, and the two crops over the use cases.
+RECORD_IDX = 41032
+TAX_AT = (30.03743, -1.87138)          # Jabana: new build off the roll
+COMP_AT = (30.06170, -1.99568)         # Kigarama: new build on undesignated land
+
+
+def make_record(L):
+    i = RECORD_IDX
+    cx, cy = float(L.lon[i]), float(L.lat[i])
+    col = COLORS[ORDER[L.use[i]]]
+
+    def hi(d, bb, w, h):
+        for j in np.nonzero(L.in_frame(bb))[0]:
+            p = ring_pts(L, j, bb, w, h)
+            if not p:
+                continue
+            if int(j) == i:
+                d.polygon(p, fill=col + (150,))
+                d.line(p + [p[0]], fill=col + (255,), width=3 * SS, joint="curve")
+            else:
+                d.line(p + [p[0]], fill=(233, 240, 239, 70), width=SS, joint="curve")
+
+    img, _ = crop_render(L, cx, cy, 120.0, (560, 560), hi)
+    p = os.path.join(PUB, "record-crop.webp")
+    img.save(p, format="WEBP", quality=80, method=6)
+
+    u = L.upis[i].strip()
+    unit = L.admin_table[int(L.admin[i])]
+    zone = L.zone_names[L.zone[i]]
+    rec = {
+        "upi": u,
+        "use": ORDER[L.use[i]],
+        "zone": zone,
+        "zoneLabel": L.stats["buildings"]["zoneLabels"].get(zone, ""),
+        "areaM2": int(L.area[i]),
+        "floors": int(L.floors[i]),
+        "heightM": round(float(L.height[i]) / 10.0, 1),
+        "year": "2025" if L.year[i] == 0 else "2023",
+        "verified": bool(L.verified[i] == 1),
+        "place": [unit.get("v"), unit.get("c"), unit.get("s"), unit.get("d")],
+        "crop": "record-crop.webp",
+    }
+    print(f"  record {u}  {rec['use']} {zone} {rec['areaM2']} m2 "
+          f"{rec['floors']} floors  verified={rec['verified']}  "
+          f"{os.path.getsize(p)/1024:.0f} KB")
+    return rec
+
+
+def make_case_crops(L):
+    UND = [L.zone_names.index(z) for z in
+           ("A1", "T", "P1", "P2", "P3B", "P3C", "W2", "W3", "W4", "W5", "WB")
+           if z in L.zone_names]
+    out = {}
+
+    def paint(pick, colour):
+        def fn(d, bb, w, h):
+            sel = L.in_frame(bb)
+            chosen = sel & pick
+            for j in np.nonzero(sel & ~chosen)[0]:
+                p = ring_pts(L, j, bb, w, h)
+                if p:
+                    d.line(p + [p[0]], fill=(233, 240, 239, 60), width=SS, joint="curve")
+            for j in np.nonzero(chosen)[0]:
+                p = ring_pts(L, j, bb, w, h)
+                if p:
+                    d.polygon(p, fill=colour + (150,))
+                    d.line(p + [p[0]], fill=colour + (255,), width=2 * SS, joint="curve")
+        return fn
+
+    for key, (lonlat, pick, colour) in {
+        "taxation": (TAX_AT, (L.year == 0) & (L.rev == 3), (239, 106, 82)),
+        "compliance": (COMP_AT, (L.year == 0) & np.isin(L.zone, UND), (232, 145, 60)),
+    }.items():
+        cx, cy = lonlat
+        img, bb = crop_render(L, cx, cy, 300.0, (960, 540), paint(pick, colour),
+                              aspect=16 / 9, dim=0.55)
+        p = os.path.join(PUB, f"crop-{key}.webp")
+        img.save(p, format="WEBP", quality=78, method=6)
+        n = int((L.in_frame(bb) & pick).sum())
+        out[key] = {"file": f"crop-{key}.webp", "highlighted": n}
+        print(f"  crop-{key:<12}{n:>4} highlighted  {os.path.getsize(p)/1024:5.0f} KB")
+    return out
 
 
 LOGO_SRC = os.path.join(ROOT, "Logo")
