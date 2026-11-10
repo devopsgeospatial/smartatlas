@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Component, Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import Landing from './components/Landing';
 
 /* ----------------------------------------------------------------------------
@@ -15,7 +15,87 @@ import Landing from './components/Landing';
  * be opened, backed out of and opened again without carrying stale state.
  * -------------------------------------------------------------------------- */
 
-const App = lazy(() => import('./App'));
+const RELOAD_KEY = 'sparc:chunk-reload';
+
+const flag = {
+  get(): boolean {
+    try {
+      return sessionStorage.getItem(RELOAD_KEY) === '1';
+    } catch {
+      return false;
+    }
+  },
+  set(v: boolean) {
+    try {
+      if (v) sessionStorage.setItem(RELOAD_KEY, '1');
+      else sessionStorage.removeItem(RELOAD_KEY);
+    } catch {
+      /* storage can be refused in a sandboxed frame; the reload still works,
+         it just loses the guard against doing it twice */
+    }
+  },
+};
+
+/**
+ * Import the dashboard, surviving a deploy that happened while this page was
+ * open.
+ *
+ * Vite names the chunk by content hash and the deploy removes the previous
+ * file, so a tab loaded before a release asks for a module that is no longer
+ * there and the import rejects. Without this the door does nothing at all:
+ * React.lazy has no state for a failed import, so the Suspense fallback simply
+ * stays up. Reloading pulls the new index and its new chunk name.
+ *
+ * The reload happens once. If the page comes back and still cannot load the
+ * module, the fault is not staleness and looping would only hide it, so the
+ * error is allowed through to the boundary below.
+ */
+function loadApp() {
+  return import('./App').then(
+    (m) => {
+      flag.set(false);
+      return m;
+    },
+    (err) => {
+      if (!flag.get()) {
+        flag.set(true);
+        window.location.reload();
+        // The page is going away; never settle, so nothing renders meanwhile.
+        return new Promise<never>(() => {});
+      }
+      throw err;
+    },
+  );
+}
+
+const App = lazy(loadApp);
+
+/** A failed chunk is the one error here that reaches the user as a dead click. */
+class AppBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div className="lp-boot">
+        <p>The Atlas could not be loaded.</p>
+        <button
+          className="themebtn"
+          onClick={() => {
+            flag.set(false);
+            window.location.reload();
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+}
 
 /** Every key urlState.ts writes, plus the one the landing search hands over. */
 const APP_KEYS = [
@@ -52,8 +132,10 @@ export default function Root() {
   if (!app) return <Landing />;
 
   return (
-    <Suspense fallback={<div className="lp-boot">Opening the Atlas</div>}>
-      <App />
-    </Suspense>
+    <AppBoundary>
+      <Suspense fallback={<div className="lp-boot">Opening the Atlas</div>}>
+        <App />
+      </Suspense>
+    </AppBoundary>
   );
 }

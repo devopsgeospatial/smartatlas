@@ -37,10 +37,23 @@ body[data-screen='landing'] #root {
   font-family: var(--font-sans);
 }
 
+/* The boot label is a mono uppercase status line. The failure message is a
+   sentence, so it opts out of both. */
+.lp-boot p {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--tx-1);
+}
+
 .lp-boot {
   min-height: 100vh;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 16px;
+  text-align: center;
   background: var(--bg-1);
   color: var(--tx-2);
   font-family: var(--font-mono);
