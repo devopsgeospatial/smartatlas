@@ -201,6 +201,20 @@ export default function App() {
     goToUpi(bootUpi);
   }, [dataset, bootUpi, goToUpi]);
 
+  /* Back to the landing page without a reload: drop the hash, then tell Root
+   * to look again. It listens for hashchange, and pushState does not fire one
+   * on its own. The history entry is pushed rather than replaced, so Back
+   * still returns to the dashboard. */
+  const goHome = useCallback(() => {
+    const base = window.location.pathname + window.location.search;
+    try {
+      window.history.pushState(null, '', base);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    } catch {
+      window.location.assign(base);
+    }
+  }, []);
+
   const onCamera = useCallback((c: CameraState) => {
     cameraRef.current = c;
   }, []);
@@ -228,6 +242,10 @@ export default function App() {
             </button>
           ))}
         </nav>
+
+        <button className="themebtn" onClick={goHome} aria-label="Back to the SPARC Kigali home page">
+          Home
+        </button>
 
         <ExportMenu
           lens={lens}

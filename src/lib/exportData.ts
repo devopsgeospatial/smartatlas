@@ -115,7 +115,16 @@ export interface ReportInput {
   noPrint?: boolean;
 }
 
-const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString());
+const n = (v: number | null | undefined) => (v == null ? 'n/a' : v.toLocaleString());
+
+/* The shared labels carry an em dash ("Residential — Planned"). The report is a
+ * printed document and sets them as prose, so it reads them without one. The
+ * CSV keeps the dashboard's own wording, because that column is data other
+ * people may already be joining on. */
+const plainUse = (code: string) =>
+  (LABELS[code] || code)
+    .replace(/\s+—\s+/, ', ')
+    .replace(/,\s+(\w)/, (_m, c) => `, ${c.toLowerCase()}`);
 const ha = (sqm: number) => Math.round(sqm / 10000).toLocaleString();
 
 function scope(f: Filters): string {
@@ -129,10 +138,10 @@ function scope(f: Filters): string {
           .join(' · '),
   ];
   if (f.uses.length < ORDER.length) {
-    bits.push(f.uses.map((u) => LABELS[u] || u).join(', '));
+    bits.push(f.uses.map((u) => plainUse(u)).join(', '));
   }
   if (f.years.length === 1) bits.push(`detected ${f.years[0]}`);
-  if (f.minScore > 0) bits.push(`confidence ≥ ${f.minScore.toFixed(2)}`);
+  if (f.minScore > 0) bits.push(`confidence at least ${f.minScore.toFixed(2)}`);
   return bits.join(' · ');
 }
 
@@ -145,7 +154,7 @@ export function buildReport(input: ReportInput): string {
   const generated = new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' });
 
   const useRows = ORDER.map(
-    (c) => `<tr><td>${LABELS[c]}</td><td class="n">${n(selection?.byUse[c] ?? b.byUse[c])}</td></tr>`,
+    (c) => `<tr><td>${plainUse(c)}</td><td class="n">${n(selection?.byUse[c] ?? b.byUse[c])}</td></tr>`,
   ).join('');
 
   const zoneSource = selection && Object.keys(selection.byZone).length ? selection.byZone : b.byZone;
@@ -164,7 +173,7 @@ export function buildReport(input: ReportInput): string {
 
   const vacantSection =
     t.byDistrict && t.bySector
-      ? `<h2>Undeveloped taxable parcels by district</h2>
+      ? `<h3>Undeveloped taxable parcels by district</h3>
 <table><thead><tr><th>District</th><th class="n">Parcels</th></tr></thead><tbody>${Object.entries(
           t.byDistrict,
         )
@@ -172,7 +181,7 @@ export function buildReport(input: ReportInput): string {
           .map(([d, v]) => `<tr><td>${d}</td><td class="n">${n(v)}</td></tr>`)
           .join('')}</tbody></table>
 
-<h2>Undeveloped taxable parcels by sector</h2>
+<h3>Undeveloped taxable parcels by sector</h3>
 <table><thead><tr><th>Sector</th><th>District</th><th class="n">Parcels</th><th class="n">Hectares</th></tr></thead>
 <tbody>${t.bySector
           .slice(0, 15)
@@ -181,7 +190,7 @@ export function buildReport(input: ReportInput): string {
               `<tr><td>${r.sector}</td><td>${r.district}</td><td class="n">${n(r.vacant)}</td><td class="n">${ha(r.sqm)}</td></tr>`,
           )
           .join('')}</tbody></table>`
-      : `<h2>Undeveloped taxable parcels by zone — ${t.scope}</h2>
+      : `<h3>Undeveloped taxable parcels by zone, ${t.scope}</h3>
 <table><thead><tr><th>Zone</th><th>Description</th><th class="n">Parcels</th></tr></thead>
 <tbody>${Object.entries(t.byZone)
           .sort((x, y) => y[1] - x[1])
@@ -191,9 +200,65 @@ export function buildReport(input: ReportInput): string {
           )
           .join('')}</tbody></table>`;
 
+  /* The registry reconciliation. Every figure below is a count held in the
+   * dataset, not an estimate: where the join produced nothing, the row says so
+   * rather than carrying a guess. The absent count is reported over structures
+   * first seen in 2025 only, because the RRA extract starts in 2019 and absence
+   * says nothing about stock that was already standing. */
+  const rev = b.revenue;
+  const r2025 = selection?.byRev2025;
+  const absentNew = selection?.newUnregistered ?? rev?.newUnregistered ?? null;
+  const conflictsVer = selection?.mismatchVerified ?? rev?.useMismatchVerified ?? null;
+  const conflictsAll = selection?.byRev?.[2] ?? rev?.useMismatch ?? null;
+  const exempt = selection?.exemptCount ?? rev?.exempted ?? null;
+  const onRoll2025 = r2025 ? (r2025[1] || 0) + (r2025[2] || 0) : null;
+  const noUpi2025 = r2025 ? r2025[0] || 0 : null;
+  const joined = absentNew != null || conflictsAll != null;
+
+  const topRows = (src: Record<string, number> | undefined, label: string) => {
+    const rows = Object.entries(src || {})
+      .filter(([, v]) => v > 0)
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 10);
+    if (!rows.length) return '';
+    return `<h3>${label}</h3>
+<table><thead><tr><th>Sector</th><th class="n">Structures</th></tr></thead><tbody>${rows
+      .map(([k, v]) => `<tr><td>${k}</td><td class="n">${n(v)}</td></tr>`)
+      .join('')}</tbody></table>`;
+  };
+
+  const registrySection = joined
+    ? `<div class="kpis">
+  <div class="kpi"><div class="l">Built since 2023, not on the roll</div><div class="v">${n(absentNew)}</div>
+    <div class="note">upper bound</div></div>
+  <div class="kpi"><div class="l">Use conflicts, confirmed on the ground</div><div class="v">${n(conflictsVer)}</div>
+    <div class="note">evidence</div></div>
+  <div class="kpi"><div class="l">Use conflicts, all structures</div><div class="v">${n(conflictsAll)}</div>
+    <div class="note">leads</div></div>
+  <div class="kpi"><div class="l">Excluded as exempt</div><div class="v">${n(exempt)}</div>
+    <div class="note">register pending</div></div>
+</div>
+
+${
+  r2025
+    ? `<h3>Registry status of structures built since 2023</h3>
+<table><thead><tr><th>Status</th><th class="n">Structures</th><th>What it means</th></tr></thead><tbody>
+<tr><td>Not in the tax roll</td><td class="n">${n(absentNew)}</td><td>No parcel record in the extract. Verify before any assessment.</td></tr>
+<tr><td>In the tax roll</td><td class="n">${n(onRoll2025)}</td><td>Matched to a parcel on the roll.</td></tr>
+<tr><td>No parcel identifier</td><td class="n">${n(noUpi2025)}</td><td>Cannot be checked either way. A data gap, not a finding.</td></tr>
+</tbody></table>`
+    : ''
+}
+
+${topRows(selection?.sectorAbsent, 'Not on the roll since 2023, leading sectors')}
+${topRows(selection?.sectorMismatchVerified, 'Use conflicts confirmed on the ground, leading sectors')}`
+    : `<p class="pending">The tax register is not joined to this extract.</p>
+<p class="sub">Structures that are undeclared, or whose observed use differs from the declared use,
+cannot be counted here. No figure is estimated in their place.</p>`;
+
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>SPARC Kigali — ${lens} report</title>
+<title>SPARC Kigali ${lens} report</title>
 <style>
   @page { margin: 18mm; }
   * { box-sizing: border-box; }
@@ -211,6 +276,11 @@ export function buildReport(input: ReportInput): string {
   .kpi { border: 1px solid #d5dedb; border-radius: 3px; padding: 10px 12px; }
   .kpi .l { font-size: 7.5pt; letter-spacing: .1em; text-transform: uppercase; color: #5b6d6b; }
   .kpi .v { font-size: 17pt; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 3px; }
+  h3 { font-size: 10pt; margin: 18px 0 4px; color: #273836; }
+  .lead { font-size: 10pt; color: #3d4f4d; margin: 6px 0 12px; max-width: 150mm; }
+  .kpi .note { font-size: 7.5pt; color: #8a6d1f; margin-top: 2px; }
+  ul.read { font-size: 9.5pt; margin: 8px 0 0; padding-left: 18px; }
+  ul.read li { margin-bottom: 6px; }
   .pending { color: #8f6206; font-size: 11pt; font-weight: 600; }
   .prov { font-size: 8.5pt; color: #5b6d6b; margin-top: 28px; border-top: 1px solid #c9d4d1;
           padding-top: 10px; }
@@ -227,7 +297,7 @@ ${
 }
 
 <h1>SPARC Kigali</h1>
-<p class="sub">${lens.charAt(0).toUpperCase() + lens.slice(1)} report · ${generated}</p>
+<p class="sub">${lens.charAt(0).toUpperCase() + lens.slice(1)} report, ${generated}</p>
 <p class="sub">Scope: ${scope(filters)}</p>
 
 <h2>Headline</h2>
@@ -240,39 +310,63 @@ ${
   <div class="kpi"><div class="l">Undeveloped land (ha)</div><div class="v">${ha(t.sqm)}</div></div>
 </div>
 
+<h2>1. Property taxation</h2>
+<p class="lead">Where the building record and the tax roll disagree. Each figure is a list of
+properties to look at, not an assessment. What a property is worth stays with the authority.</p>
+
+${registrySection}
+
 ${vacantSection}
 
-<h2>Structures by zone</h2>
+<h2>2. Compliance monitoring</h2>
+<p class="lead">What was actually built, against the zone of the parcel beneath it. Structures are
+counted by the zone they stand in, so a zone that should carry no buildings and does is visible
+in the first table.</p>
+
+<h3>Structures by Master Plan zone</h3>
 <table><thead><tr><th>Zone</th><th>Description</th><th class="n">Structures</th></tr></thead>
 <tbody>${zoneRows}</tbody></table>
 
-<h2>Structures by use</h2>
+<h3>Structures by observed use</h3>
 <table><thead><tr><th>Use</th><th class="n">Structures</th></tr></thead><tbody>${useRows}</tbody></table>
 
-<h2>Not yet available</h2>
-<p class="pending">Declared use and tax register status — pending data.</p>
-<p class="sub">The RRA tax register is not joined to this dataset, so structures that are undeclared,
-or whose observed use differs from the declared use, cannot yet be counted. No figure is estimated
-in their place.</p>
+<h2>How to read this</h2>
+<ul class="read">
+  <li><b>Not on the roll is an upper bound.</b> Statutorily exempt property has to be removed
+      first, and the exemption flag reaches ${n(exempt)} structures in this scope so far. The
+      figure can only fall.</li>
+  <li><b>Confirmed conflicts are evidence, the rest are leads.</b> A conflict on a structure an
+      officer has stood in front of is an observation. One the classifier inferred is a reason
+      to send someone.</li>
+  <li><b>Absence is only read over new build.</b> The register extract starts in 2019, so absence
+      says nothing about a structure that was already standing in 2023.</li>
+  <li><b>Undeveloped land needs no model.</b> It rests on parcel records rather than on a use
+      prediction, which makes it the cleanest base in this report.</li>
+</ul>
 
 <p class="prov">Source: exported Kigali buildings table (${n(b.total)} structures) and parcel tax
 table (${n(tax.parcels)} parcels), prepared ${stats.generatedAt.slice(0, 10)}. Building use is a model
-prediction. Height comes from a built-up height product and carries metre-scale uncertainty, so a
-floor count near a storey boundary can be out by one. This report supports assessment and inspection
-decisions; it does not assess, fine, or issue notices.</p>
+prediction and its precision is not measured. Height comes from a built-up height product and
+carries metre-scale uncertainty, so a floor count near a storey boundary can be out by one. This
+report supports assessment and inspection decisions; it does not assess, fine, or issue notices.</p>
 
 </body></html>`;
 }
 
 export function openReport(input: ReportInput): boolean {
   const html = buildReport(input);
-  const w = window.open('', '_blank', 'noopener');
-  if (w && w.document) {
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+  /* A blob URL rather than document.write into a blank window. Writing into an
+   * opened window leaves the tab on about:blank, which some browsers treat as
+   * the opener's document and others refuse to print; a blob is a real
+   * document with its own URL. If the popup is blocked the file is saved
+   * instead, so the action always produces something. */
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  const w = window.open(url, '_blank', 'noopener');
+  if (w) {
+    window.setTimeout(() => URL.revokeObjectURL(url), 120000);
     return true;
   }
+  URL.revokeObjectURL(url);
   download(`${input.lens}-report-${stamp()}.html`, html, 'text/html;charset=utf-8');
   return false;
 }

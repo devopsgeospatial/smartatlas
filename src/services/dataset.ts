@@ -294,8 +294,13 @@ async function fetchBytes(
     onSize(0);
     return null;
   }
+  /* content-length is the size on the wire. When the server compresses, the
+   * reader below hands back decompressed bytes, so the two cannot be compared:
+   * the three data files are 13.4 MB gzipped and 37 MB decoded, which pinned
+   * the bar at full for most of the wait. Compressed response, no total. */
   const declared = Number(res.headers.get('content-length'));
-  onSize(Number.isFinite(declared) && declared > 0 ? declared : null);
+  const encoded = (res.headers.get('content-encoding') || '').trim() !== '';
+  onSize(!encoded && Number.isFinite(declared) && declared > 0 ? declared : null);
 
   if (!res.body) {
     const buf = await res.arrayBuffer();

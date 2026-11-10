@@ -64,11 +64,14 @@ export default function ExportMenu({
             disabled={empty}
             onClick={() => {
               setOpen(false);
+              /* Try the real download first, always. Inside a sandbox without
+                 allow-downloads it does nothing and raises nothing, so the
+                 copy panel opens behind it as the route that cannot fail. */
+              exportCsv(features);
               if (embedded) {
                 setFallback({ kind: 'csv', payload: toCsv(features), rows: features.length });
                 return;
               }
-              exportCsv(features);
               onDone('Exported CSV', `${features.length.toLocaleString()} rows`);
             }}
           >
@@ -80,6 +83,7 @@ export default function ExportMenu({
             disabled={empty}
             onClick={() => {
               setOpen(false);
+              exportGeoJson(features);
               if (embedded) {
                 setFallback({
                   kind: 'geojson',
@@ -88,7 +92,6 @@ export default function ExportMenu({
                 });
                 return;
               }
-              exportGeoJson(features);
               onDone('Exported GeoJSON', `${features.length.toLocaleString()} rows`);
             }}
           >
