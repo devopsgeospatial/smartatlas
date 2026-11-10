@@ -104,9 +104,6 @@ export default function LensPanel({
                 ? `${mb(progress.loaded)} MB`
                 : 'Connecting…'}
           </div>
-          <div className="d">
-            Every structure is held in the browser, so the first load is the only wait.
-          </div>
         </div>
       </div>
     );
