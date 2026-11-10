@@ -58,3 +58,9 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # The site carries the whole packed building layer, so the artifact
+          # is around 43 MB and Pages spends a long time in syncing_files.
+          # The action's default ten minutes started timing out, which fails
+          # the run and silently leaves the previous build serving.
+          timeout: 1800000
