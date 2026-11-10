@@ -1385,3 +1385,23 @@ button {
   outline: 1px solid var(--ac-1);
   outline-offset: 0;
 }
+
+/* Export: the manual routes, shown only when the page is framed. */
+.exportdrop .exportrule {
+  border: 0;
+  border-top: 1px solid var(--line-1);
+  margin: 4px 0;
+}
+
+.exportdrop .exportalt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-1);
+  text-decoration: none;
+  color: var(--tx-1);
+  cursor: pointer;
+}
+
+.exportdrop .exportalt:hover { background: var(--accent-wash); }

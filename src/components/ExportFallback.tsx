@@ -19,19 +19,36 @@ interface Props {
   payload: string;
   /** Rows for the data exports; omitted for the report. */
   rows?: number;
+  /**
+   * True only when the frame's sandbox has actually refused the capability.
+   * False means the parent is cross-origin and could not be read, so the panel
+   * offers itself as a second route without claiming the first one failed.
+   */
+  certain: boolean;
   onClose: () => void;
 }
 
 const TITLES: Record<FallbackKind, string> = {
-  csv: 'Structures — CSV',
-  geojson: 'Structures — GeoJSON',
+  csv: 'Structures, CSV',
+  geojson: 'Structures, GeoJSON',
   report: 'Lens report',
 };
+
+function why(kind: FallbackKind, certain: boolean): string {
+  if (kind === 'report') {
+    return certain
+      ? 'This embed does not allow a new tab or a saved file, so the report is shown here. To print or keep it, open the app in its own tab.'
+      : 'The report is shown here in case the new tab did not open. To print or keep it, open the app in its own tab.';
+  }
+  return certain
+    ? 'This embed does not allow file downloads, so the rows are here instead. Copy them into a spreadsheet, or open the app in its own tab, where Export saves a file as normal.'
+    : 'If the file did not arrive, this page may be framed by a site that blocks downloads. Copy the rows below, or open the app in its own tab and try again.';
+}
 
 /** Enough to confirm it is the right data without pasting megabytes into a textarea. */
 const PREVIEW_LIMIT = 20000;
 
-export default function ExportFallback({ kind, payload, rows, onClose }: Props) {
+export default function ExportFallback({ kind, payload, rows, certain, onClose }: Props) {
   const [copied, setCopied] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [linkCopied, setLinkCopied] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -80,11 +97,7 @@ export default function ExportFallback({ kind, payload, rows, onClose }: Props) 
           </button>
         </header>
 
-        <p className="fallback-why">
-          {kind === 'report'
-            ? 'Saving and printing are blocked inside this embed. The report is shown below. To print or keep it, copy the link and open the app in a new tab.'
-            : 'File downloads are blocked inside this embed. Copy the rows below and paste them into a spreadsheet — or copy the link, open the app in a new tab, and Export saves a file as normal.'}
-        </p>
+        <p className="fallback-why">{why(kind, certain)}</p>
 
         {kind === 'report' ? (
           <iframe className="fallback-report" srcDoc={payload} title="Lens report" />
@@ -104,6 +117,15 @@ export default function ExportFallback({ kind, payload, rows, onClose }: Props) 
               Showing the first {PREVIEW_LIMIT.toLocaleString()} characters. Copy takes all of it.
             </span>
           )}
+          <a
+            className="linkbtn"
+            href={appUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={appUrl}
+          >
+            Open in a new tab
+          </a>
           <button className="linkbtn" onClick={copyLink} title={appUrl}>
             {linkCopied ? 'Link copied' : 'Copy link'}
           </button>
