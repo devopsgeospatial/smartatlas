@@ -55,12 +55,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # The site ships the whole packed building layer, so the artifact is
+      # about 43 MB and Pages can sit in syncing_files for a long while. Ten
+      # minutes is the action's hard maximum, not just its default, so there
+      # is nothing to raise: a sync that overruns fails the run and leaves the
+      # previous build serving. If that becomes common the artifact has to get
+      # smaller. A failed run also leaves the deployment holding the lock, so
+      # the next push is rejected until it is cancelled.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          # The site carries the whole packed building layer, so the artifact
-          # is around 43 MB and Pages spends a long time in syncing_files.
-          # The action's default ten minutes started timing out, which fails
-          # the run and silently leaves the previous build serving.
-          timeout: 1800000
