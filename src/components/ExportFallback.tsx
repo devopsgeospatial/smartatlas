@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { copyText } from '../lib/clipboard';
+import { hostPageUrl } from '../lib/embed';
 
 export type FallbackKind = 'csv' | 'geojson' | 'report';
 
@@ -37,12 +38,12 @@ const TITLES: Record<FallbackKind, string> = {
 function why(kind: FallbackKind, certain: boolean): string {
   if (kind === 'report') {
     return certain
-      ? 'This embed does not allow a new tab or a saved file, so the report is shown here. To print or keep it, open the app in its own tab.'
-      : 'The report is shown here in case the new tab did not open. To print or keep it, open the app in its own tab.';
+      ? 'This embed does not allow a new tab or a saved file, so the report is shown here. Copy the HTML to keep it.'
+      : 'The report is shown here in case the new tab did not open. Copy the HTML to keep it.';
   }
   return certain
-    ? 'This embed does not allow file downloads, so the rows are here instead. Copy them into a spreadsheet, or open the app in its own tab, where Export saves a file as normal.'
-    : 'If the file did not arrive, this page may be framed by a site that blocks downloads. Copy the rows below, or open the app in its own tab and try again.';
+    ? 'This embed does not allow file downloads, so the rows are here instead. Copy them and paste them into a spreadsheet.'
+    : 'If the file did not arrive, this page is framed by a site that blocks downloads. Copy the rows below and paste them into a spreadsheet.';
 }
 
 /** Enough to confirm it is the right data without pasting megabytes into a textarea. */
@@ -53,8 +54,10 @@ export default function ExportFallback({ kind, payload, rows, certain, onClose }
   const [linkCopied, setLinkCopied] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  /* The current view, hash and all, so pasting it opens on this exact screen. */
-  const appUrl = window.location.href;
+  /* The page the reader was given, not this app's hosting address. Framed,
+   * that is the embedding page; standalone it is the current view, hash and
+   * all, so pasting it opens on this exact screen. */
+  const appUrl = hostPageUrl();
 
   useEffect(() => {
     closeRef.current?.focus();

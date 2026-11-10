@@ -7,7 +7,7 @@ import {
   toCsv,
   toGeoJson,
 } from '../lib/exportData';
-import { canDownload, canOpenTab, type Capability } from '../lib/embed';
+import { canDownload, canOpenTab, hostPageUrl, type Capability } from '../lib/embed';
 import ExportFallback, { type FallbackKind } from './ExportFallback';
 import type { RawStats, Selection } from '../services/dataset';
 import type { BFeature, Filters, LensId } from '../types';
@@ -43,6 +43,7 @@ export default function ExportMenu({
    * route beside it without claiming anything was blocked. */
   const dl = useRef(canDownload()).current;
   const tab = useRef(canOpenTab()).current;
+  const hostUrl = useRef(hostPageUrl()).current;
 
   useEffect(() => {
     const away = (e: MouseEvent) => {
@@ -140,20 +141,22 @@ export default function ExportMenu({
           {/* Only when framed. A frame may or may not permit a download and we
               cannot tell from inside, so these sit here as routes the reader
               can take if nothing arrived, instead of a panel that interrupts
-              an export which very likely worked. */}
+              an export which very likely worked. The tab opens the embedding
+              page, not this app's hosting URL, so it carries the same sandbox:
+              copying the rows is the route that always works. */}
           {dl !== 'yes' && (
             <>
               <hr className="exportrule" />
               <a
                 className="exportalt"
                 role="menuitem"
-                href={window.location.href}
+                href={hostUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setOpen(false)}
               >
                 <b>Open in a new tab</b>
-                <span>If the download did not arrive</span>
+                <span>The full page, outside this panel</span>
               </a>
               <button
                 role="menuitem"
