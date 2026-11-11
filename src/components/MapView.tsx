@@ -102,8 +102,14 @@ export default function MapView(props: Props) {
    *                      holds most of them, so suppressing that cohort would
    *                      hide the larger of the two findings.
    *
-   * Everything reconciled, and everything that could not be checked, stays
-   * quiet. Only what an assessor could act on takes a colour.
+   * Reconciled property carries the quiet green. It is not a lead, so it is
+   * the most muted thing on the map that is not switched off entirely, but it
+   * is 46% of the layer and leaving it black meant the map could not answer
+   * the question its own legend asks: how far does the registry reach.
+   *
+   * What stays black is only what cannot be read: no parcel identifier, a
+   * 2023 structure whose absence the extract cannot speak to, and exempt
+   * property, which is held out of all three findings on purpose.
    */
   const colorExpr = (): any => {
     if (propsRef.current.lens === 'revenue') {
@@ -115,11 +121,14 @@ export default function MapView(props: Props) {
         : ['==', rev, REV.MISMATCH];
       /* Exempt property drops to baseline before anything else is asked. A
        * primary dwelling is not a lead however it reconciles, and colouring
-       * it costs an officer the trip. */
+       * it costs an officer the trip. The guard is on all three arms rather
+       * than the two findings, so "exempt is never coloured" stays a rule a
+       * reader can hold, instead of one that quietly has an exception. */
       return [
         'case',
         ['all', notExempt, ['==', rev, REV.ABSENT], isNew], REV_COLORS[REV.ABSENT],
         ['all', notExempt, conflict], REV_COLORS[REV.MISMATCH],
+        ['all', notExempt, ['==', rev, REV.MATCH]], REV_COLORS[REV.MATCH],
         BASELINE_COLOR,
       ];
     }
@@ -800,7 +809,7 @@ export default function MapView(props: Props) {
       {/* The revenue lens recolours the map, so it has to say what the colours
         * mean. Without this the reader is guessing, and the baseline swatch in
         * particular carries the caveat that makes the view defensible. */}
-      {/* Compact by design: three swatches and a title. The caveat that used
+      {/* Compact by design: four swatches and a title. The caveat that used
         * to sit here is said out loud in the room instead, and a legend that
         * has to be read is a legend that covers the map. */}
       {props.lens === 'revenue' && (
@@ -834,13 +843,16 @@ export default function MapView(props: Props) {
                 </span>
               </div>
               <div className="revlegend-row">
-                {/* One swatch, four states: in the registry, no parcel
-                  * identifier, statutorily exempt, and anything absent from
-                  * the registry that was detected in 2023. They are drawn
-                  * alike because none of them is a candidate, so the row
+                <span className="revlegend-dot" style={{ background: REV_COLORS[REV.MATCH] }} />
+                <span>In registry</span>
+              </div>
+              <div className="revlegend-row">
+                {/* One swatch, three states, none of them readable as a
+                  * finding: no parcel identifier, a 2023 structure the
+                  * extract cannot speak to, and exempt property. The row
                   * claims nothing more than that. */}
                 <span className="revlegend-dot" style={{ background: BASELINE_COLOR }} />
-                <span>Everything else</span>
+                <span>Not assessed or exempt</span>
               </div>
             </>
           )}

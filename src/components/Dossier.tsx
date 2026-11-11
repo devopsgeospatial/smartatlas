@@ -130,7 +130,18 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
       </header>
 
       <div className="dbody">
-        {/* ---- the comparison that matters --------------------------------- */}
+        {/* ---- the comparison the revenue case rests on --------------------
+          * What the imagery shows, beside what the parcel is registered as.
+          *
+          * These two used to sit in separate blocks, with the observed use
+          * repeated in each, so the one comparison a revenue officer is
+          * actually making had to be done in the reader's head. Observed
+          * appears once now, and the thing it is being compared against sits
+          * next to it.
+          *
+          * An empty declared use is not "no declaration" — it means the
+          * parcel is absent from the extract entirely, which the value says
+          * in words rather than leaving a blank to interpret. */}
         <section className="compare">
           <div className="compare-side">
             <div className="compare-label">Observed use</div>
@@ -150,30 +161,28 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
           </div>
 
           <div className="compare-side">
+            <div className="compare-label">Declared use</div>
+            <div className="compare-value">
+              <span>{registryValue}</span>
+            </div>
+            {/* No caption where there is no record to characterise: the value
+              * already names the registry, and a note under it would be
+              * restating the same absence twice. */}
+            {registryNote && <div className="compare-note">{registryNote}</div>}
+          </div>
+        </section>
+
+        {/* ---- and what the master plan asks of the parcel ------------------
+          * The compliance question, which shares "observed" with the block
+          * above and so is not repeated as a second side-by-side. */}
+        <section className="compare compare-one">
+          <div className="compare-side">
             <div className="compare-label">Proposed use</div>
             <div className="compare-value">
               <span className="zonecode mono">{zoneCode || '—'}</span>
               <span>{zoneDesc(zoneLabel) || 'No zone recorded'}</span>
             </div>
             <div className="compare-note">master plan</div>
-          </div>
-        </section>
-
-        {/* ---- what the registry holds for this parcel ---------------------
-          * An empty declared use is not "no declaration" — it means the parcel
-          * is absent from the extract entirely, which this says in words
-          * rather than leaving a blank the reader has to interpret.
-          *
-          * This used to carry a second column, the imagery-derived use, which
-          * was the same figure as "Observed use" above under a different
-          * heading. One column, one fact. */}
-        <section className="compare compare-one">
-          <div className="compare-side">
-            <div className="compare-label">Property tax registry</div>
-            <div className="compare-value">
-              <span>{registryValue}</span>
-            </div>
-            {registryNote && <div className="compare-note">{registryNote}</div>}
           </div>
         </section>
 

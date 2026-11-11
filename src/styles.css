@@ -1280,6 +1280,10 @@ button {
   height: 9px;
   border-radius: 2px;
   flex: none;
+  /* The baseline swatch is near black on a near black panel, so without an
+     edge it is a row with no swatch at all. The hairline is the panel's own
+     border colour, and every swatch carries it so the four read as one set. */
+  border: 1px solid var(--line-2);
 }
 .revlegend-note {
   margin: 8px 0 0;
