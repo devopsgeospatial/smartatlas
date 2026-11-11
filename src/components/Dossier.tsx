@@ -62,15 +62,26 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
   const registryValue = absentPre2023
     ? 'Not assessed (pre 2023 stock)'
     : p.declared_use || 'No registry record';
-  /* A difference carries no note. The two values sit side by side, so the
-   * reader makes the comparison rather than being handed a verdict on it. */
+  /* The note states coverage, not a verdict on the comparison.
+   *
+   * These are two different facts and only one of them is readable off the
+   * screen. Whether the use matches is there to be seen, because both values
+   * are shown side by side. Whether the parcel is in the registry at all is
+   * not: a declared use appears with nothing saying where it came from, and
+   * that is the question the revenue case turns on.
+   *
+   * So a difference still carries no verdict, and both of the states that
+   * have a record now say they have one. The states without a record need no
+   * note: their value already says so in words. */
   const registryNote = absentPre2023
     ? ''
     : p.rev === REV.MATCH
-      ? 'agrees with observed'
-      : p.rev === REV.MISMATCH || p.rev === REV.ABSENT
-        ? ''
-        : 'no parcel identifier';
+      ? 'in the registry, use agrees'
+      : p.rev === REV.MISMATCH
+        ? 'in the registry'
+        : p.rev === REV.ABSENT
+          ? ''
+          : 'no parcel identifier';
 
   /* What else stands in this zone — context for whether this building is typical. */
   const zoneMix = stats?.buildings.byZoneUse?.[zoneCode];
