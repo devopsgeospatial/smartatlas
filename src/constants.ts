@@ -70,10 +70,10 @@ export const REV = { NONE: 0, MATCH: 1, MISMATCH: 2, ABSENT: 3 } as const;
 export const REV_ORDER = [REV.ABSENT, REV.MISMATCH, REV.MATCH, REV.NONE];
 
 export const REV_LABELS: Record<number, string> = {
-  [REV.NONE]: 'No UPI — not checked',
-  [REV.MATCH]: 'In tax roll',
-  [REV.MISMATCH]: 'In roll, use conflicts',
-  [REV.ABSENT]: 'Not in tax roll',
+  [REV.NONE]: 'No UPI, not checked',
+  [REV.MATCH]: 'In property tax registry',
+  [REV.MISMATCH]: 'Use differs from registered use',
+  [REV.ABSENT]: 'Not in property tax registry',
 };
 
 export const REV_COLORS: Record<number, string> = {

@@ -651,6 +651,9 @@ button {
   padding: 11px 12px;
   margin-bottom: var(--sp-5);
 }
+/* The registry block has no counterpart to sit beside, so it takes the full
+   width instead of being squeezed into the first of three columns. */
+.compare-one { grid-template-columns: 1fr; }
 .compare-side { min-width: 0; }
 .compare-label {
   font-family: var(--font-mono);

@@ -151,19 +151,19 @@ export default function LensPanel({
     const rollBars: BarDatum[] = [
       {
         key: 'absent',
-        label: 'Not in tax roll',
+        label: 'Not in property tax registry',
         value: revSrc[REV.ABSENT] || 0,
         color: REV_COLORS[REV.ABSENT],
       },
       {
         key: 'onroll',
-        label: 'In tax roll',
+        label: 'In property tax registry',
         value: (revSrc[REV.MATCH] || 0) + (revSrc[REV.MISMATCH] || 0),
         color: REV_COLORS[REV.MATCH],
       },
       {
         key: 'noupi',
-        label: 'No UPI — not checked',
+        label: 'No UPI, not checked',
         value: revSrc[REV.NONE] || 0,
         color: REV_COLORS[REV.NONE],
       },
@@ -201,16 +201,18 @@ export default function LensPanel({
 
         {/* Indicators first, both groups together, so the four numbers can be
           * read in one glance. The charts that explain them follow. */}
-        <h4 className="lens-sub">Potential revenue leakage</h4>
+        <h4 className="lens-sub">Registry coverage, new construction</h4>
 
         <div className="stat2grid">
           <Stat
-            label="New since 2023, not in tax roll"
+            label="New since 2023, not in property tax registry"
             value={n(selection?.newUnregistered ?? b.revenue?.newUnregistered)}
           />
           <Stat
             label={
-              verifiedOnly ? 'Verified use conflicts, all years' : 'Use conflicts, all years'
+              verifiedOnly
+                ? 'Use differs from registered use, field verified (all years)'
+                : 'Use differs from registered use, all years'
             }
             value={n(conflicts)}
           />
@@ -225,20 +227,20 @@ export default function LensPanel({
           <span className="box" aria-hidden="true">
             {verifiedOnly ? '✓' : ''}
           </span>
-          <span className="optname">Ground-verified conflicts only</span>
+          <span className="optname">Field verified only</span>
         </button>
 
         <h4 className="lens-sub">Undeveloped land</h4>
 
         <div className="stat2grid">
-          <Stat label="Undeveloped taxable parcels" value={n(t.vacant)} />
+          <Stat label="Undeveloped parcels" value={n(t.vacant)} />
           <Stat label="Undeveloped land" value={n(ha(t.sqm))} unit="ha" />
         </div>
 
-        <Bars title="Registry status — built since 2023" data={rollBars} />
+        <Bars title="Registry status, built since 2023" data={rollBars} />
 
         <Bars
-          title="Not in tax roll — top sectors"
+          title="Not in registry, top sectors"
           data={sectorBars(selection?.sectorAbsent, REV_COLORS[REV.ABSENT])}
           limit={8}
           onPick={onPickSector}
@@ -247,8 +249,8 @@ export default function LensPanel({
         <Bars
           title={
             verifiedOnly
-              ? 'Verified use conflicts — top sectors'
-              : 'Use conflicts — top sectors'
+              ? 'Use differs from registered use, field verified, top sectors'
+              : 'Use differs from registered use, top sectors'
           }
           data={sectorBars(conflictBySector, REV_COLORS[REV.MISMATCH])}
           limit={8}
@@ -333,7 +335,7 @@ export default function LensPanel({
       <div className="stat2grid">
         <Stat label="Structures" value={n(selection?.matches ?? b.total)} />
         <Stat label="New since 2023" value={n(newCount)} />
-        <Stat label="Undeveloped taxable parcels" value={n(taxFor(tax, filters).vacant)} />
+        <Stat label="Undeveloped parcels" value={n(taxFor(tax, filters).vacant)} />
         <Stat
           label="Field verified"
           value={n(b.groundConfirmed)}

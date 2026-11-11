@@ -16,6 +16,14 @@ interface Props {
 const nf = (v: number | null | undefined, digits = 0, suffix = '') =>
   v == null ? '—' : `${v.toLocaleString(undefined, { maximumFractionDigits: digits })}${suffix}`;
 
+/**
+ * Floors and height are modelled, not measured, so a gap is a gap in the
+ * estimate rather than a missing fact about the building. Saying so beats a
+ * dash the reader has to interpret.
+ */
+const est = (v: number | null | undefined, digits = 0, suffix = '') =>
+  v == null ? 'Not estimated' : `${v.toLocaleString(undefined, { maximumFractionDigits: digits })}${suffix}`;
+
 const zoneDesc = (label: string) => (label || '').replace(/^[A-Z0-9]+\s*-\s*/, '');
 
 /**
@@ -37,6 +45,24 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
   const score = typeof p.score === 'number' ? p.score : null;
   const zoneCode = p.zoneCode || '';
   const zoneLabel = (p.Proposed_Use || '').trim();
+
+  /* Registry coverage was only assessed over structures first detected in
+   * 2025. A 2023 structure missing from the extract may simply predate it, so
+   * that cohort is given no verdict at all rather than one that would really
+   * only be reporting when the extract starts. */
+  const pre2023 = p.acquisition_date === '2023';
+  const registryValue = pre2023
+    ? 'Not assessed (pre 2023 stock)'
+    : p.declared_use || 'No registry record';
+  const registryNote = pre2023
+    ? ''
+    : p.rev === REV.MISMATCH
+      ? 'differs from observed use'
+      : p.rev === REV.MATCH
+        ? 'agrees with observed'
+        : p.rev === REV.ABSENT
+          ? ''
+          : 'no parcel identifier';
 
   /* What else stands in this zone — context for whether this building is typical. */
   const zoneMix = stats?.buildings.byZoneUse?.[zoneCode];
@@ -86,11 +112,11 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
         <div className="dfacts">
           <div>
             <span className="k">Floors</span>
-            <span className="v num">{nf(p.estimated_floor)}</span>
+            <span className="v num">{est(p.estimated_floor)}</span>
           </div>
           <div>
             <span className="k">Height</span>
-            <span className="v num">{nf(p.Height, 1, ' m')}</span>
+            <span className="v num">{est(p.Height, 1, ' m')}</span>
           </div>
           <div>
             <span className="k">Footprint</span>
@@ -133,43 +159,21 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
           </div>
         </section>
 
-        {/* ---- what the owner told RRA, beside what the model sees ---------
-          * Only shown when the parcel is on the roll. An empty declared use is
-          * not "no declaration" — it means the parcel is absent from the
-          * extract entirely, which the row below says in words rather than
-          * leaving a blank the reader has to interpret. */}
-        <section className="compare">
+        {/* ---- what the registry holds for this parcel ---------------------
+          * An empty declared use is not "no declaration" — it means the parcel
+          * is absent from the extract entirely, which this says in words
+          * rather than leaving a blank the reader has to interpret.
+          *
+          * This used to carry a second column, the imagery-derived use, which
+          * was the same figure as "Observed use" above under a different
+          * heading. One column, one fact. */}
+        <section className="compare compare-one">
           <div className="compare-side">
-            <div className="compare-label">Declared to RRA</div>
+            <div className="compare-label">Property tax registry</div>
             <div className="compare-value">
-              <span>{p.declared_use || 'Not on the tax roll'}</span>
+              <span>{registryValue}</span>
             </div>
-            <div className="compare-note">
-              {p.rev === REV.MISMATCH
-                ? 'conflicts with observed'
-                : p.rev === REV.MATCH
-                  ? 'agrees with observed'
-                  : p.rev === REV.ABSENT
-                    ? 'parcel not in the registry'
-                    : 'no parcel identifier'}
-            </div>
-          </div>
-
-          <div className="compare-vs" aria-hidden="true">
-            vs
-          </div>
-
-          <div className="compare-side">
-            <div className="compare-label">Predicted land use</div>
-            <div className="compare-value">
-              <span
-                className="usechip"
-                style={{ background: useColor(p.lu_cod_pred) }}
-                aria-hidden="true"
-              />
-              <span>{useLabel(p.lu_cod_pred)}</span>
-            </div>
-            <div className="compare-note">from imagery</div>
+            {registryNote && <div className="compare-note">{registryNote}</div>}
           </div>
         </section>
 

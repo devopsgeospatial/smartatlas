@@ -151,6 +151,11 @@ export default function MapView(props: Props) {
       return;
     }
     if (map.getZoom() < CONFIG.pointZoom) {
+      /* Below the threshold the surfaces are the whole picture, so the legend
+       * describes those. This is the only place that knows which of the two is
+       * being drawn, because it is the same test that empties the structure
+       * source. */
+      setHeatMode(true);
       (map.getSource('structures') as GeoJSONSource | undefined)?.setData(EMPTY as any);
       /* On the revenue lens the heatmap IS the answer at this zoom, so the
        * chip should say what it is showing rather than ask to be zoomed. */
@@ -167,6 +172,11 @@ export default function MapView(props: Props) {
       propsRef.current.onFeatures([]);
       return;
     }
+    /* Past the threshold individual footprints are drawn and the surfaces are
+     * gone, so the legend switches to the colours actually on screen. Without
+     * this the ramp stayed up at every zoom, describing a heat surface that
+     * was no longer there. */
+    setHeatMode(false);
     const b = map.getBounds();
     const res = queryViewport(
       d,
@@ -794,8 +804,8 @@ export default function MapView(props: Props) {
         * to sit here is said out loud in the room instead, and a legend that
         * has to be read is a legend that covers the map. */}
       {props.lens === 'revenue' && (
-        <div className="revlegend" aria-label="Revenue leakage">
-          <div className="revlegend-title">Potential revenue leakage</div>
+        <div className="revlegend" aria-label="Registry coverage">
+          <div className="revlegend-title">Registry coverage</div>
           {heatMode ? (
             <>
               <div className="revlegend-ramp" aria-hidden="true" />
@@ -804,14 +814,14 @@ export default function MapView(props: Props) {
                 <span>concentrated</span>
               </div>
               <div className="revlegend-row revlegend-what">
-                <span>Structures to act on, per area</span>
+                <span>Candidates for verification, per area</span>
               </div>
             </>
           ) : (
             <>
               <div className="revlegend-row">
                 <span className="revlegend-dot" style={{ background: REV_COLORS[REV.ABSENT] }} />
-                <span>Built since 2023, not on roll</span>
+                <span>Not in registry, built since 2023</span>
               </div>
               <div className="revlegend-row">
                 <span
@@ -819,12 +829,18 @@ export default function MapView(props: Props) {
                   style={{ background: REV_COLORS[REV.MISMATCH] }}
                 />
                 <span>
-                  On roll, use conflicts{props.verifiedOnly ? ' (verified)' : ''}
+                  Use differs from registered use
+                  {props.verifiedOnly ? ' (field verified)' : ''}
                 </span>
               </div>
               <div className="revlegend-row">
+                {/* One swatch, four states: in the registry, no parcel
+                  * identifier, statutorily exempt, and anything absent from
+                  * the registry that was detected in 2023. They are drawn
+                  * alike because none of them is a candidate, so the row
+                  * claims nothing more than that. */}
                 <span className="revlegend-dot" style={{ background: BASELINE_COLOR }} />
-                <span>Baseline</span>
+                <span>Everything else</span>
               </div>
             </>
           )}

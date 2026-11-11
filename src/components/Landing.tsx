@@ -231,7 +231,7 @@ export default function Landing() {
   const stats: [string, number | undefined, string][] = [
     ['Structures', figures?.structures, `lens=atlas&at=${CITY_VIEW}`],
     ['New since 2023', figures?.newSince2023, `year=2025&at=${CITY_VIEW}`],
-    ['Undeveloped taxable parcels', figures?.undeveloped, `lens=revenue&at=${CITY_VIEW}`],
+    ['Undeveloped parcels', figures?.undeveloped, `lens=revenue&at=${CITY_VIEW}`],
     ['Field verified', figures?.fieldVerified, `lens=revenue&at=${CITY_VIEW}`],
   ];
   const counted = [
@@ -417,15 +417,15 @@ export default function Landing() {
                 height={540}
                 loading="lazy"
                 decoding="async"
-                alt="Imagery of a Jabana street, with the structures that appeared since the last imagery and are not on the tax roll picked out."
+                alt="Imagery of a Jabana street, with the structures that appeared since the last imagery and are not in the property tax registry picked out."
               />
             )}
             <h3 className="lp-case-h">Property taxation</h3>
             <p className="lp-case-p">
               Every extracted structure carries its parcel identifier, so the record can be set
-              beside the tax roll:{' '}
+              beside the property tax registry:{' '}
               {extra ? nf(extra.registry.notOnRoll) : 'some'} structures that appeared since the
-              last imagery sit on parcels the roll does not hold, and{' '}
+              last imagery sit on parcels the registry does not hold, and{' '}
               {extra ? nf(extra.registry.conflictsAll) : 'others'} show a declared use that
               disagrees with the imagery.
             </p>

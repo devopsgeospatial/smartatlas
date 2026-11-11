@@ -173,7 +173,7 @@ export function buildReport(input: ReportInput): string {
 
   const vacantSection =
     t.byDistrict && t.bySector
-      ? `<h3>Undeveloped taxable parcels by district</h3>
+      ? `<h3>Undeveloped parcels by district</h3>
 <table><thead><tr><th>District</th><th class="n">Parcels</th></tr></thead><tbody>${Object.entries(
           t.byDistrict,
         )
@@ -181,7 +181,7 @@ export function buildReport(input: ReportInput): string {
           .map(([d, v]) => `<tr><td>${d}</td><td class="n">${n(v)}</td></tr>`)
           .join('')}</tbody></table>
 
-<h3>Undeveloped taxable parcels by sector</h3>
+<h3>Undeveloped parcels by sector</h3>
 <table><thead><tr><th>Sector</th><th>District</th><th class="n">Parcels</th><th class="n">Hectares</th></tr></thead>
 <tbody>${t.bySector
           .slice(0, 15)
@@ -190,7 +190,7 @@ export function buildReport(input: ReportInput): string {
               `<tr><td>${r.sector}</td><td>${r.district}</td><td class="n">${n(r.vacant)}</td><td class="n">${ha(r.sqm)}</td></tr>`,
           )
           .join('')}</tbody></table>`
-      : `<h3>Undeveloped taxable parcels by zone, ${t.scope}</h3>
+      : `<h3>Undeveloped parcels by zone, ${t.scope}</h3>
 <table><thead><tr><th>Zone</th><th>Description</th><th class="n">Parcels</th></tr></thead>
 <tbody>${Object.entries(t.byZone)
           .sort((x, y) => y[1] - x[1])
@@ -229,11 +229,11 @@ export function buildReport(input: ReportInput): string {
 
   const registrySection = joined
     ? `<div class="kpis">
-  <div class="kpi"><div class="l">Built since 2023, not on the roll</div><div class="v">${n(absentNew)}</div>
+  <div class="kpi"><div class="l">Built since 2023, not in property tax registry</div><div class="v">${n(absentNew)}</div>
     <div class="note">upper bound</div></div>
-  <div class="kpi"><div class="l">Use conflicts, confirmed on the ground</div><div class="v">${n(conflictsVer)}</div>
+  <div class="kpi"><div class="l">Use differs from registered use, field verified</div><div class="v">${n(conflictsVer)}</div>
     <div class="note">evidence</div></div>
-  <div class="kpi"><div class="l">Use conflicts, all structures</div><div class="v">${n(conflictsAll)}</div>
+  <div class="kpi"><div class="l">Use differs from registered use, all structures</div><div class="v">${n(conflictsAll)}</div>
     <div class="note">leads</div></div>
   <div class="kpi"><div class="l">Excluded as exempt</div><div class="v">${n(exempt)}</div>
     <div class="note">register pending</div></div>
@@ -243,16 +243,16 @@ ${
   r2025
     ? `<h3>Registry status of structures built since 2023</h3>
 <table><thead><tr><th>Status</th><th class="n">Structures</th><th>What it means</th></tr></thead><tbody>
-<tr><td>Not in the tax roll</td><td class="n">${n(absentNew)}</td><td>No parcel record in the extract. Verify before any assessment.</td></tr>
-<tr><td>In the tax roll</td><td class="n">${n(onRoll2025)}</td><td>Matched to a parcel on the roll.</td></tr>
+<tr><td>Not in property tax registry</td><td class="n">${n(absentNew)}</td><td>No parcel record in the extract. Verify before any assessment.</td></tr>
+<tr><td>In property tax registry</td><td class="n">${n(onRoll2025)}</td><td>Matched to a parcel in the registry.</td></tr>
 <tr><td>No parcel identifier</td><td class="n">${n(noUpi2025)}</td><td>Cannot be checked either way. A data gap, not a finding.</td></tr>
 </tbody></table>`
     : ''
 }
 
-${topRows(selection?.sectorAbsent, 'Not on the roll since 2023, leading sectors')}
-${topRows(selection?.sectorMismatchVerified, 'Use conflicts confirmed on the ground, leading sectors')}`
-    : `<p class="pending">The tax register is not joined to this extract.</p>
+${topRows(selection?.sectorAbsent, 'Not in registry since 2023, leading sectors')}
+${topRows(selection?.sectorMismatchVerified, 'Use differs from registered use, field verified, leading sectors')}`
+    : `<p class="pending">The property tax registry is not joined to this extract.</p>
 <p class="sub">Structures that are undeclared, or whose observed use differs from the declared use,
 cannot be counted here. No figure is estimated in their place.</p>`;
 
@@ -306,12 +306,12 @@ ${
   <div class="kpi"><div class="l">New since 2023</div><div class="v">${n(
     selection?.byYear['2025'] ?? b.byYear['2025'],
   )}</div></div>
-  <div class="kpi"><div class="l">Undeveloped taxable parcels</div><div class="v">${n(t.vacant)}</div></div>
+  <div class="kpi"><div class="l">Undeveloped parcels</div><div class="v">${n(t.vacant)}</div></div>
   <div class="kpi"><div class="l">Undeveloped land (ha)</div><div class="v">${ha(t.sqm)}</div></div>
 </div>
 
 <h2>1. Property taxation</h2>
-<p class="lead">Where the building record and the tax roll disagree. Each figure is a list of
+<p class="lead">Where the building record and the property tax registry disagree. Each figure is a list of
 properties to look at, not an assessment. What a property is worth stays with the authority.</p>
 
 ${registrySection}
@@ -332,10 +332,10 @@ in the first table.</p>
 
 <h2>How to read this</h2>
 <ul class="read">
-  <li><b>Not on the roll is an upper bound.</b> Statutorily exempt property has to be removed
+  <li><b>Absence from the registry is an upper bound.</b> Statutorily exempt property has to be removed
       first, and the exemption flag reaches ${n(exempt)} structures in this scope so far. The
       figure can only fall.</li>
-  <li><b>Confirmed conflicts are evidence, the rest are leads.</b> A conflict on a structure an
+  <li><b>Field verified differences are evidence, the rest are leads.</b> A difference on a structure an
       officer has stood in front of is an observation. One the classifier inferred is a reason
       to send someone.</li>
   <li><b>Absence is only read over new build.</b> The register extract starts in 2019, so absence
