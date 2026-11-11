@@ -62,15 +62,15 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
   const registryValue = absentPre2023
     ? 'Not assessed (pre 2023 stock)'
     : p.declared_use || 'No registry record';
+  /* A difference carries no note. The two values sit side by side, so the
+   * reader makes the comparison rather than being handed a verdict on it. */
   const registryNote = absentPre2023
     ? ''
-    : p.rev === REV.MISMATCH
-      ? 'differs from observed use'
-      : p.rev === REV.MATCH
-        ? 'agrees with observed'
-        : p.rev === REV.ABSENT
-          ? ''
-          : 'no parcel identifier';
+    : p.rev === REV.MATCH
+      ? 'agrees with observed'
+      : p.rev === REV.MISMATCH || p.rev === REV.ABSENT
+        ? ''
+        : 'no parcel identifier';
 
   /* What else stands in this zone — context for whether this building is typical. */
   const zoneMix = stats?.buildings.byZoneUse?.[zoneCode];
