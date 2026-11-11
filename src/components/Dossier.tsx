@@ -46,15 +46,23 @@ export default function Dossier({ feature, stats, onClose, onCopied }: Props) {
   const zoneCode = p.zoneCode || '';
   const zoneLabel = (p.Proposed_Use || '').trim();
 
-  /* Registry coverage was only assessed over structures first detected in
-   * 2025. A 2023 structure missing from the extract may simply predate it, so
-   * that cohort is given no verdict at all rather than one that would really
-   * only be reporting when the extract starts. */
-  const pre2023 = p.acquisition_date === '2023';
-  const registryValue = pre2023
+  /* The 2023 rule bites on absence only, not on the whole cohort.
+   *
+   * Absence is the one verdict the extract cannot support for stock that was
+   * already standing: it starts in 2019, so a 2023 structure missing from it
+   * may simply predate it. That case gets no verdict.
+   *
+   * A declared use is the opposite. It is a fact the registry holds, and the
+   * parcel being in the extract is what makes it readable, not when the
+   * structure appeared. Suppressing it for the 2023 cohort hid the declared
+   * use on 343,163 structures that have one, 81,368 of them the very use
+   * differences this view exists to show. The comparison is valid wherever
+   * there is a record to compare against. */
+  const absentPre2023 = p.rev === REV.ABSENT && p.acquisition_date === '2023';
+  const registryValue = absentPre2023
     ? 'Not assessed (pre 2023 stock)'
     : p.declared_use || 'No registry record';
-  const registryNote = pre2023
+  const registryNote = absentPre2023
     ? ''
     : p.rev === REV.MISMATCH
       ? 'differs from observed use'
