@@ -138,11 +138,52 @@ export default function MapView(props: Props) {
     return m;
   };
 
+  /**
+   * How solid the fill is, which on the revenue lens depends on the finding.
+   *
+   * Reconciled property carries its green on the outline alone. Filling 46% of
+   * the layer laid a wash over half the city and left the two findings
+   * competing with it; an edge says "in the registry" just as clearly and
+   * leaves the roof underneath readable, which is the whole argument for
+   * imagery under this layer.
+   *
+   * It drops to zero opacity rather than being filtered out of the layer.
+   * MapLibre hit-tests clicks against the fill, so removing it would leave a
+   * reconciled building selectable only on its edge, and the popup is where
+   * the declared use is read.
+   */
+  const fillOpacityExpr = (): any => {
+    const stops: [number, number][] = [
+      [14, 0.55],
+      [16, 0.22],
+      [18, 0.12],
+    ];
+    if (propsRef.current.lens !== 'revenue') {
+      return ['interpolate', ['linear'], ['zoom'], ...stops.flat()];
+    }
+    const rev = ['to-number', ['get', 'rev'], -1];
+    const notExempt = ['!=', ['get', 'exempt'], true];
+    const reconciled: any[] = ['all', notExempt, ['==', rev, REV.MATCH]];
+    /* The zoom ramp has to stay the outermost expression and the per-feature
+     * test has to sit inside each stop. MapLibre only accepts ['zoom'] at the
+     * top level of a paint property, so wrapping the ramp in a 'case' makes
+     * the whole property invalid: the layer then stops painting AND stops
+     * hit-testing, which takes the popup with it on every building, not just
+     * the ones meant to lose their fill. */
+    return [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      ...stops.flatMap(([z, o]) => [z, ['case', reconciled, 0, o]]),
+    ];
+  };
+
   const repaint = () => {
     const map = mapRef.current;
     if (!map || !map.getLayer('structures')) return;
     const colors = colorExpr();
     map.setPaintProperty('structures', 'fill-color', colors);
+    map.setPaintProperty('structures', 'fill-opacity', fillOpacityExpr());
     map.setPaintProperty('structures-line', 'line-color', colors);
     const sel = propsRef.current.selectedId;
     const f = ['==', ['get', 'OBJECTID'], sel ?? -1] as any;
@@ -564,19 +605,23 @@ export default function MapView(props: Props) {
        * stays visible underneath and an officer can compare what the model says
        * against what the imagery shows without toggling anything off.
        *
-       * The fill does not disappear, it recedes. Two things still need it: at
-       * z14 a house is three pixels across, where an outline and a fill are the
-       * same picture and the city has to read as mass; and MapLibre hit-tests
-       * clicks against the fill, so a hollow polygon would only be selectable
-       * on its edge. It therefore drops to a wash that fades as the outline
-       * takes over. */
+       * The fill mostly recedes rather than disappearing. Two things still
+       * need it: at z14 a house is three pixels across, where an outline and a
+       * fill are the same picture and the city has to read as mass; and
+       * MapLibre hit-tests clicks against the fill, so a hollow polygon would
+       * only be selectable on its edge. It therefore drops to a wash that
+       * fades as the outline takes over.
+       *
+       * The exception is reconciled property on the revenue lens, which goes
+       * to zero. See fillOpacityExpr: it is half the layer, and at any
+       * strength it reads as a wash over the city rather than as a finding. */
       map.addLayer({
         id: 'structures',
         type: 'fill',
         source: 'structures',
         paint: {
           'fill-color': colorExpr(),
-          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 14, 0.55, 16, 0.22, 18, 0.12],
+          'fill-opacity': fillOpacityExpr(),
         },
       });
 
